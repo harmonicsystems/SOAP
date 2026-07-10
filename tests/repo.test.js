@@ -82,4 +82,29 @@ describe('encrypted repository', () => {
     expect(get(repo.clients).map((c) => c.id)).toEqual(['good'])
     expect(get(repo.loadWarnings)).toBe(1)
   }, 30000)
+
+  it('learns phrases (dedup), records usage, and persists across lock/unlock', async () => {
+    await repo.createVault('corpus test passphrase')
+
+    expect(await repo.savePhrase('S', '  needed  co-regulation before starting ')).toBe(true)
+    expect(get(repo.appSettings).learned.S).toEqual(['needed co-regulation before starting'])
+
+    // duplicate (case-insensitive) is rejected; duplicate of a default too
+    expect(await repo.savePhrase('S', 'Needed co-regulation before starting')).toBe(false)
+    expect(await repo.savePhrase('S', 'transitioned willingly to the session')).toBe(false)
+    expect(get(repo.appSettings).learned.S).toHaveLength(1)
+
+    repo.recordPhraseUse('needed co-regulation before starting')
+    repo.recordPhraseUse('needed co-regulation before starting')
+    expect(get(repo.appSettings).phraseUsage['needed co-regulation before starting'].count).toBe(2)
+
+    // persists through a lock/unlock cycle (settings written eagerly on save)
+    await repo.lockNow()
+    expect(await repo.unlock('corpus test passphrase')).toBe(true)
+    expect(get(repo.appSettings).learned.S).toEqual(['needed co-regulation before starting'])
+
+    await repo.removeLearnedPhrase('S', 'needed co-regulation before starting')
+    expect(get(repo.appSettings).learned.S).toEqual([])
+    expect(get(repo.appSettings).phraseUsage['needed co-regulation before starting']).toBeUndefined()
+  }, 30000)
 })

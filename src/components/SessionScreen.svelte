@@ -2,14 +2,25 @@
   // THE core screen (spec §5.4): optimized for live-session speed.
   // Trial taps update in-memory state instantly; persistence is debounced.
   import { onDestroy } from 'svelte'
-  import { sessions, goals, clients, appSettings, putRecord, onBeforeLock } from '../lib/repo.js'
+  import { get } from 'svelte/store'
+  import {
+    sessions,
+    goals,
+    clients,
+    appSettings,
+    putRecord,
+    onBeforeLock,
+    recordPhraseUse,
+    savePhrase
+  } from '../lib/repo.js'
   import { navigate } from '../lib/router.js'
   import { todayISO } from '../lib/text.js'
   import { SESSION_SETTINGS } from '../lib/constants.js'
   import { generateO } from '../lib/ogen.js'
-  import { effectiveBank } from '../lib/phrasebanks.js'
+  import { rankedBank } from '../lib/phrasebanks.js'
   import { aSuggestions, pSuggestions } from '../lib/suggest.js'
   import { appendPhrase } from '../lib/text.js'
+  import { toast } from '../lib/toast.js'
   import GoalCard from './GoalCard.svelte'
   import PhraseSection from './PhraseSection.svelte'
 
@@ -22,6 +33,10 @@
   let working = $state(null)
   let stacks = $state({}) // per-goal undo stacks (session-local, not persisted)
   let selected = $state(0)
+  // Usage counts frozen at load so live chip taps don't reshuffle the bank
+  // mid-session (ranking adaptation applies to the NEXT session). Read via
+  // get() so it is not a reactive dependency.
+  let usageSnapshot = $state({})
 
   // Load a working copy when the session id changes; merge in goals that were
   // added since the session was created. The guard prevents autosave echoes
@@ -33,6 +48,7 @@
     w.soap ??= { S: '', O: '', A: '', P: '' }
     w.goalData ??= []
     w.observations ??= ''
+    w.standout ??= ''
     for (const g of $goals.filter((x) => x.clientId === w.clientId && x.status === 'active')) {
       if (!w.goalData.some((gd) => gd.goalId === g.id)) {
         w.goalData.push({
@@ -40,12 +56,14 @@
           trials: null,
           cueLevel: g.targetCriterion?.cueLevel ?? 'minimal',
           cueTypes: [],
+          observations: [],
           activity: '',
           notes: ''
         })
       }
     }
     working = w
+    usageSnapshot = get(appSettings).phraseUsage ?? {}
     stacks = {}
     selected = 0
   })
@@ -89,7 +107,9 @@
 
   // ---- O auto-generation: live from trial data unless hand-edited ----
   const autoO = $derived(
-    working && client ? generateO(client.code, $goals, working.goalData, working.observations) : ''
+    working && client
+      ? generateO(client.code, $goals, working.goalData, working.observations, working.standout)
+      : ''
   )
 
   // Never regenerate on a finalized session — Finalize locks the note until
@@ -173,12 +193,16 @@
           .map((s) => (s.id === working.id ? $state.snapshot(working) : s))
       : []
   )
-  const aChips = $derived(
-    working ? [...aSuggestions($state.snapshot(working), goalMap, clientSessions), ...effectiveBank($appSettings, 'A')] : []
+  // Data-driven suggestions (computed live) are shown separately from the
+  // ranked static bank; only bank chips are usage-tracked and learnable.
+  const aSug = $derived(
+    working ? aSuggestions($state.snapshot(working), goalMap, clientSessions) : []
   )
-  const pChips = $derived(
-    working ? [...pSuggestions($state.snapshot(working), goalMap), ...effectiveBank($appSettings, 'P')] : []
-  )
+  const pSug = $derived(working ? pSuggestions($state.snapshot(working), goalMap) : [])
+  const sBank = $derived(rankedBank($appSettings, 'S', usageSnapshot))
+  const oBank = $derived(rankedBank($appSettings, 'O', usageSnapshot))
+  const aBank = $derived(rankedBank($appSettings, 'A', usageSnapshot))
+  const pBank = $derived(rankedBank($appSettings, 'P', usageSnapshot))
 
   function addObservation(chip) {
     working.observations = appendPhrase(working.observations, chip)
@@ -186,7 +210,13 @@
     // must also land in the visible O text directly or it would never reach
     // the note (spec §6: observations appendable via chips).
     if (working.oEdited) working.soap.O = appendPhrase(working.soap.O, chip)
+    recordPhraseUse(chip)
     scheduleSave()
+  }
+
+  async function saveLearned(section, text) {
+    const added = await savePhrase(section, text)
+    toast.show(added ? 'Phrase saved to your bank' : 'That phrase is already in your bank')
   }
 
   function regenerateO() {
@@ -288,12 +318,32 @@
     />
   {/each}
 
+  <section class="card" style="border-left:3px solid var(--accent)">
+    <label for="sess-standout" style="font-size:0.95rem; color:var(--ink); font-weight:600">
+      What stood out this session?
+    </label>
+    <p class="hint" style="margin-top:0.1rem">
+      One specific thing — a moment, a breakthrough, something you'd want to remember. This is
+      what makes the note real. Added to the end of O. (No names.)
+    </p>
+    <input
+      id="sess-standout"
+      style="width:100%"
+      bind:value={working.standout}
+      disabled={isFinal}
+      oninput={scheduleSave}
+      placeholder="e.g., used the whiteboard unprompted to self-cue /r/ before each word"
+    />
+  </section>
+
   <PhraseSection
     label="S — Subjective"
-    chips={effectiveBank($appSettings, 'S')}
+    chips={sBank}
     bind:value={working.soap.S}
     disabled={isFinal}
     onchange={scheduleSave}
+    onuse={recordPhraseUse}
+    onsave={(text) => saveLearned('S', text)}
     placeholder="Arrival, mood, engagement, reports from teacher/parent…"
   />
 
@@ -303,7 +353,7 @@
       Updates live as you tap trials{working.oEdited ? ' — paused because you edited it' : ''}.
     </p>
     <div class="chips">
-      {#each effectiveBank($appSettings, 'O') as chip}
+      {#each oBank as chip}
         <button type="button" class="chip" disabled={isFinal} onclick={() => addObservation(chip)}>
           {chip}
         </button>
@@ -325,20 +375,26 @@
 
   <PhraseSection
     label="A — Assessment"
-    hint="Numbered suggestions are computed from this session's data."
-    chips={aChips}
+    hint="Accent-edged chips are computed from this session's data; the rest is your bank."
+    suggestions={aSug}
+    chips={aBank}
     bind:value={working.soap.A}
     disabled={isFinal}
     onchange={scheduleSave}
+    onuse={recordPhraseUse}
+    onsave={(text) => saveLearned('A', text)}
     placeholder="Progress statements, response to cues, comparison with previous sessions…"
   />
 
   <PhraseSection
     label="P — Plan"
-    chips={pChips}
+    suggestions={pSug}
+    chips={pBank}
     bind:value={working.soap.P}
     disabled={isFinal}
     onchange={scheduleSave}
+    onuse={recordPhraseUse}
+    onsave={(text) => saveLearned('P', text)}
     placeholder="Next steps, cue fading, generalization, home practice…"
   />
 {/if}

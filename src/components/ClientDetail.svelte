@@ -35,11 +35,13 @@
       soap: { S: '', O: '', A: '', P: '' },
       oEdited: false,
       observations: '',
+      standout: '',
       goalData: active.map((g) => ({
         goalId: g.id,
         trials: null,
         cueLevel: g.targetCriterion?.cueLevel ?? 'minimal',
         cueTypes: [],
+        observations: [],
         activity: '',
         notes: ''
       })),

@@ -207,6 +207,31 @@ button:disabled {
   color: var(--accent-ink);
 }
 
+/* Observation chips (§2): visually distinct from the blue cue controls — a
+   calm slate, neutral in tone since observations can be positive or not. */
+/* Data-driven suggestion chips (A/P): computed from this session's numbers,
+   marked with an accent edge so they read as "the smart ones". */
+.chip.suggestion {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.chip.obs {
+  background: var(--bg);
+  border-color: var(--line);
+}
+
+.chip.obs:hover:not(:disabled) {
+  border-color: var(--muted);
+  background: var(--bg);
+}
+
+.chip.obs.active {
+  background: #5b6b7a;
+  color: #fff;
+  border-color: #5b6b7a;
+}
+
 /* ---- header ---- */
 
 .app-header {

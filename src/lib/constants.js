@@ -24,3 +24,27 @@ export function nextCueLevel(level) {
   const i = order.indexOf(level)
   return i >= 0 && i < order.length - 1 ? order[i + 1] : null
 }
+
+// Quick-tap observation tags for the goal card (§2 authenticity capture).
+// `chip` is the short button label; `clause` is a third-person predicate that
+// reads grammatically after "{ClientCode} " so tapped observations assemble
+// into a natural O-section sentence. Behavioral/observational — distinct from
+// the evaluative cue-level and cue-type controls.
+export const OBSERVATION_TAGS = [
+  { id: 'self-correct', chip: 'self-corrected', clause: 'self-corrected errors independently' },
+  { id: 'model', chip: 'needed model', clause: 'required repeated models' },
+  { id: 'generalized', chip: 'generalized', clause: 'generalized the target to spontaneous speech' },
+  { id: 'initiated', chip: 'initiated', clause: 'initiated responses independently' },
+  { id: 'visual', chip: 'used visuals', clause: 'responded well to visual supports' },
+  { id: 'redirection', chip: 'needed redirection', clause: 'required frequent redirection to task' },
+  { id: 'transitions', chip: 'distractible', clause: 'was distractible after transitions' },
+  { id: 'fatigue', chip: 'fatigued late', clause: 'showed fatigue toward the end of the session' },
+  { id: 'environment', chip: 'environment', clause: 'was distracted by the environment' },
+  { id: 'carryover', chip: 'carryover', clause: 'demonstrated carryover reported from the classroom' }
+]
+
+const OBS_BY_ID = new Map(OBSERVATION_TAGS.map((t) => [t.id, t]))
+
+export function observationTag(id) {
+  return OBS_BY_ID.get(id) ?? null
+}

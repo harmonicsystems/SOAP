@@ -1,5 +1,5 @@
 <script>
-  import { CUE_LEVELS, CUE_TYPES, domainLabel } from '../lib/constants.js'
+  import { CUE_LEVELS, CUE_TYPES, OBSERVATION_TAGS, domainLabel } from '../lib/constants.js'
   import { accuracyPct, shortLabelFor } from '../lib/ogen.js'
 
   let {
@@ -20,6 +20,16 @@
     const i = gd.cueTypes.indexOf(t)
     if (i >= 0) gd.cueTypes.splice(i, 1)
     else gd.cueTypes.push(t)
+    onchange()
+  }
+
+  // Observation tags (§2): tapped tags flow into the O section as a natural
+  // second sentence for this goal — texture the trial numbers can't capture.
+  function toggleObservation(id) {
+    gd.observations ??= []
+    const i = gd.observations.indexOf(id)
+    if (i >= 0) gd.observations.splice(i, 1)
+    else gd.observations.push(id)
     onchange()
   }
 </script>
@@ -67,7 +77,7 @@
     {/each}
   </div>
 
-  <div class="chips">
+  <div class="chips" aria-label="Cue types">
     {#each CUE_TYPES as t}
       <button
         type="button"
@@ -77,6 +87,22 @@
         onclick={() => toggleType(t)}
       >
         {t}
+      </button>
+    {/each}
+  </div>
+
+  <p class="hint" style="margin:0.5rem 0 0.15rem">What happened this session?</p>
+  <div class="chips" aria-label="Observations">
+    {#each OBSERVATION_TAGS as t}
+      <button
+        type="button"
+        class="chip obs"
+        class:active={gd.observations?.includes(t.id)}
+        {disabled}
+        title={t.clause}
+        onclick={() => toggleObservation(t.id)}
+      >
+        {t.chip}
       </button>
     {/each}
   </div>

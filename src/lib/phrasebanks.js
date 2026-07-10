@@ -46,7 +46,41 @@ export const DEFAULT_BANKS = {
   ]
 }
 
+// The editable base list for a section: the user's Settings override if they
+// customized it, otherwise the shipped defaults. Used by the Settings editor.
 export function effectiveBank(settings, section) {
   const override = settings?.phraseBanks?.[section]
   return Array.isArray(override) ? override : DEFAULT_BANKS[section]
+}
+
+// The session-screen bank: the editable base plus the clinician's own learned
+// phrases (§1), deduped, ranked so the phrases they actually reach for float to
+// the top. Ranking is by (use count desc, most-recent use desc, base order) —
+// authentic-by-construction because learned phrases are the clinician's words.
+//
+// `usage` is a snapshot ({text: {count, lastUsedAt}}); the caller freezes it at
+// mount so live taps don't reshuffle chips mid-session (adaptation shows up
+// next session, not jarringly under the finger).
+export function rankedBank(settings, section, usage = {}) {
+  const base = effectiveBank(settings, section) ?? []
+  const learned = settings?.learned?.[section] ?? []
+  // Dedup case-insensitively (matching savePhrase), first occurrence wins so
+  // the base-bank casing is preferred over a learned duplicate. Usage is keyed
+  // the same way so counts for the same phrase never split across casings.
+  const seen = new Set()
+  const list = []
+  const add = (text, order, isLearned) => {
+    const k = text.toLowerCase()
+    if (seen.has(k)) return
+    seen.add(k)
+    list.push({ text, order, learned: isLearned })
+  }
+  base.forEach((text, i) => add(text, i, false))
+  learned.forEach((text, i) => add(text, base.length + i, true))
+  return list
+    .map((e) => ({ ...e, u: usage[e.text.toLowerCase()] ?? { count: 0, lastUsedAt: 0 } }))
+    .sort(
+      (a, b) => b.u.count - a.u.count || b.u.lastUsedAt - a.u.lastUsedAt || a.order - b.order
+    )
+    .map((e) => e.text)
 }

@@ -1,4 +1,5 @@
 // O-section auto-generation (spec §6): one sentence per goal from trial data.
+import { observationTag } from './constants.js'
 
 export function accuracyPct(correct, total) {
   if (!total) return 0
@@ -9,6 +10,25 @@ export function shortLabelFor(goal) {
   if (goal.shortLabel?.trim()) return goal.shortLabel.trim()
   const words = goal.text.replace(/^Will\s+/i, '').split(/\s+/).slice(0, 6).join(' ')
   return words.replace(/[.,;:]$/, '')
+}
+
+// Join predicate clauses into one grammatical list: "a", "a and b",
+// "a, b, and c" (Oxford comma).
+function joinClauses(clauses) {
+  if (clauses.length === 0) return ''
+  if (clauses.length === 1) return clauses[0]
+  if (clauses.length === 2) return `${clauses[0]} and ${clauses[1]}`
+  return `${clauses.slice(0, -1).join(', ')}, and ${clauses[clauses.length - 1]}`
+}
+
+// Second sentence per goal built from tapped observation tags (§2). Reads as
+// "{ClientCode} self-corrected errors independently and showed fatigue…".
+export function observationSentence(clientCode, gd) {
+  const clauses = (gd?.observations ?? [])
+    .map((id) => observationTag(id)?.clause)
+    .filter(Boolean)
+  if (!clauses.length) return null
+  return `${clientCode} ${joinClauses(clauses)}.`
 }
 
 // Exact pattern (spec §6):
@@ -31,14 +51,27 @@ export function goalSentence(clientCode, goal, gd) {
   return `${clientCode} produced ${label} with ${pct}% accuracy (${gd.trials.correct}/${gd.trials.total} trials) ${cues}${during}.`
 }
 
-export function generateO(clientCode, goalList, goalData, observations = '') {
+// Order: per-goal trial sentence (+ its observation sentence), then chip
+// observations, then the one-line "what stood out" note. A goal with tapped
+// observations but no trials still contributes its observation sentence — the
+// clinician recorded something real about it.
+export function generateO(clientCode, goalList, goalData, observations = '', standout = '') {
   const byId = new Map(goalList.map((g) => [g.id, g]))
-  const sentences = (goalData ?? [])
-    .map((gd) => {
-      const goal = byId.get(gd.goalId)
-      return goal ? goalSentence(clientCode, goal, gd) : null
-    })
-    .filter(Boolean)
-  const obs = (observations ?? '').trim()
-  return [sentences.join(' '), obs].filter(Boolean).join(' ')
+  const parts = []
+  for (const gd of goalData ?? []) {
+    const goal = byId.get(gd.goalId)
+    if (!goal) continue
+    const trial = goalSentence(clientCode, goal, gd)
+    if (trial) parts.push(trial)
+    const obs = observationSentence(clientCode, gd)
+    if (obs) parts.push(obs)
+  }
+  const chipObs = (observations ?? '').trim()
+  if (chipObs) parts.push(chipObs)
+  let stood = (standout ?? '').trim()
+  if (stood) {
+    stood = stood[0].toUpperCase() + stood.slice(1) // it becomes its own sentence
+    parts.push(/[.!?]$/.test(stood) ? stood : `${stood}.`)
+  }
+  return parts.join(' ')
 }

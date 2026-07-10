@@ -9,6 +9,7 @@
     currentKey,
     markBackupDone,
     importData,
+    removeLearnedPhrase,
     lastBackupAt
   } from '../lib/repo.js'
   import { packBackup, unpackBackup, saveBackupFile, backupFilename } from '../lib/backup.js'
@@ -257,6 +258,34 @@
       <button onclick={() => (bankDrafts = null)}>Cancel</button>
       <button class="btn-quiet" onclick={resetBanks}>Reset all to defaults</button>
     </div>
+  {/if}
+</div>
+
+<div class="card">
+  <h2>Your saved phrases</h2>
+  <p class="hint">
+    Phrases you saved from your own notes during sessions. The ones you use most rise to the top
+    of the chips automatically. Remove any you no longer want.
+  </p>
+  {#if SECTIONS.every((s) => ($appSettings.learned?.[s] ?? []).length === 0)}
+    <p class="muted" style="margin:0">
+      None yet. On the session screen, type a note and tap “＋ Save phrase” to add it here.
+    </p>
+  {:else}
+    {#each SECTIONS as s}
+      {@const learned = $appSettings.learned?.[s] ?? []}
+      {#if learned.length}
+        <h3 style="margin:0.75rem 0 0.25rem">{s} — {SECTION_NAMES[s]}</h3>
+        <div class="row-list">
+          {#each learned as phrase (phrase)}
+            <div class="row-item" style="padding:0.4rem 0.75rem">
+              <span style="flex:1">{phrase}</span>
+              <button class="btn-quiet" onclick={() => removeLearnedPhrase(s, phrase)}>Remove</button>
+            </div>
+          {/each}
+        </div>
+      {/if}
+    {/each}
   {/if}
 </div>
 

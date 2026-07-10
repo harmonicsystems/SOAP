@@ -13,6 +13,7 @@ import {
   PBKDF2_ITERATIONS
 } from './crypto.js'
 import { mergeRecords } from './backup.js'
+import { effectiveBank } from './phrasebanks.js'
 
 let key = null // in-memory only; wiped on lock; never persisted
 let lockGen = 0 // bumped on every lock; in-flight writes check it and bail
@@ -57,7 +58,12 @@ export function defaultSettings() {
     therapistName: '',
     // null per section = use shipped defaults; an array = user override.
     // Defaults are never mutated, so updates can ship new phrases (spec §6).
-    phraseBanks: { S: null, O: null, A: null, P: null }
+    phraseBanks: { S: null, O: null, A: null, P: null },
+    // Phrases the clinician saved from their own typing (§1). Kept separate
+    // from phraseBanks so a shipped-defaults reset never wipes them.
+    learned: { S: [], O: [], A: [], P: [] },
+    // Ranking signal for chips: { [phraseText]: { count, lastUsedAt } }.
+    phraseUsage: {}
   }
 }
 
@@ -156,6 +162,7 @@ export async function lockNow() {
 // (another tab rekeyed the vault, so our key is stale).
 export function hardLock() {
   lockGen++
+  clearTimeout(usageTimer) // drop any pending soft usage write
   key = null
   sessionEpoch = null
   for (const store of Object.values(stores)) store.set([])
@@ -203,14 +210,88 @@ export async function deleteRecord(table, id) {
   await touchModified()
 }
 
+// Same cross-tab guard as putRecord: never write under a stale key after
+// another tab rekeyed the vault (that would corrupt the settings row and
+// silently reset learned phrases on next unlock). Returns true on success.
+async function persistSettings(rec) {
+  if (!key) return false
+  const blob = await encryptJSON(key, rec)
+  const vault = await db.meta.get('vault')
+  if (vault && (vault.epoch ?? null) !== sessionEpoch) {
+    hardLock()
+    return false
+  }
+  if (!key) return false
+  await db.settings.put({ id: 'settings', updatedAt: rec.updatedAt, blob })
+  return true
+}
+
 export async function saveSettings(next) {
   if (!key) return
   const rec = { ...next, id: 'settings', updatedAt: Date.now() }
-  await db.settings.put({ id: 'settings', updatedAt: rec.updatedAt, blob: await encryptJSON(key, rec) })
+  if (!(await persistSettings(rec))) return // stale key / locked — drop
   appSettings.set(rec)
   // Settings (phrase banks, therapist name) are part of backups too — the
   // backup-staleness nag must see these changes.
   await touchModified()
+}
+
+// Normalize a phrase for the corpus: single-line, trimmed. Case preserved so
+// the clinician's own capitalization/voice survives.
+function normalizePhrase(text) {
+  return (text ?? '').replace(/\s+/g, ' ').trim()
+}
+
+// Save a clinician-typed phrase into their learned corpus (§1). No-op on empty
+// or on a phrase already present (case-insensitive) in the base bank or learned
+// list, so the same line never appears twice. Returns true if added.
+export async function savePhrase(section, text) {
+  if (!key) return false
+  const phrase = normalizePhrase(text)
+  if (!phrase) return false
+  const s = get(appSettings)
+  const base = effectiveBank(s, section) ?? []
+  const learned = s.learned?.[section] ?? []
+  const lower = phrase.toLowerCase()
+  if ([...base, ...learned].some((p) => p.toLowerCase() === lower)) return false
+  const nextLearned = { ...(s.learned ?? { S: [], O: [], A: [], P: [] }) }
+  nextLearned[section] = [...learned, phrase]
+  await saveSettings({ ...s, learned: nextLearned })
+  return true
+}
+
+export async function removeLearnedPhrase(section, text) {
+  if (!key) return
+  const s = get(appSettings)
+  const learned = s.learned?.[section] ?? []
+  const nextLearned = { ...(s.learned ?? { S: [], O: [], A: [], P: [] }) }
+  nextLearned[section] = learned.filter((p) => p !== text)
+  // Drop its usage entry too so a re-added phrase starts fresh.
+  const usage = { ...(s.phraseUsage ?? {}) }
+  delete usage[text.toLowerCase()]
+  await saveSettings({ ...s, learned: nextLearned, phraseUsage: usage })
+}
+
+// Record a chip use for ranking (§1). Updates the in-memory store immediately
+// (so the next session's snapshot is fresh) and debounces the encrypted write —
+// a soft signal, so a dropped write on lock is harmless.
+let usageTimer = null
+export function recordPhraseUse(text) {
+  if (!key) return
+  const phrase = normalizePhrase(text)
+  if (!phrase) return
+  const k = phrase.toLowerCase() // case-insensitive so counts never split by casing
+  appSettings.update((s) => {
+    const usage = { ...(s.phraseUsage ?? {}) }
+    const cur = usage[k] ?? { count: 0, lastUsedAt: 0 }
+    usage[k] = { count: cur.count + 1, lastUsedAt: Date.now() }
+    return { ...s, phraseUsage: usage }
+  })
+  clearTimeout(usageTimer)
+  usageTimer = setTimeout(() => {
+    const rec = { ...get(appSettings), id: 'settings', updatedAt: Date.now() }
+    persistSettings(rec) // key-guarded; silently drops if locked meanwhile
+  }, 1200)
 }
 
 export async function changePassphrase(currentPass, newPass) {
