@@ -1,0 +1,344 @@
+<script>
+  // THE core screen (spec §5.4): optimized for live-session speed.
+  // Trial taps update in-memory state instantly; persistence is debounced.
+  import { onDestroy } from 'svelte'
+  import { sessions, goals, clients, appSettings, putRecord, onBeforeLock } from '../lib/repo.js'
+  import { navigate } from '../lib/router.js'
+  import { todayISO } from '../lib/text.js'
+  import { SESSION_SETTINGS } from '../lib/constants.js'
+  import { generateO } from '../lib/ogen.js'
+  import { effectiveBank } from '../lib/phrasebanks.js'
+  import { aSuggestions, pSuggestions } from '../lib/suggest.js'
+  import { appendPhrase } from '../lib/text.js'
+  import GoalCard from './GoalCard.svelte'
+  import PhraseSection from './PhraseSection.svelte'
+
+  let { id } = $props()
+
+  const stored = $derived($sessions.find((s) => s.id === id))
+  const client = $derived(stored && $clients.find((c) => c.id === stored.clientId))
+  const goalMap = $derived(new Map($goals.map((g) => [g.id, g])))
+
+  let working = $state(null)
+  let stacks = $state({}) // per-goal undo stacks (session-local, not persisted)
+  let selected = $state(0)
+
+  // Load a working copy when the session id changes; merge in goals that were
+  // added since the session was created. The guard prevents autosave echoes
+  // (store updates from our own putRecord) from clobbering live edits.
+  $effect(() => {
+    if (!stored) return
+    if (working && working.id === stored.id) return
+    const w = structuredClone(stored)
+    w.soap ??= { S: '', O: '', A: '', P: '' }
+    w.goalData ??= []
+    w.observations ??= ''
+    for (const g of $goals.filter((x) => x.clientId === w.clientId && x.status === 'active')) {
+      if (!w.goalData.some((gd) => gd.goalId === g.id)) {
+        w.goalData.push({
+          goalId: g.id,
+          trials: null,
+          cueLevel: g.targetCriterion?.cueLevel ?? 'minimal',
+          cueTypes: [],
+          activity: '',
+          notes: ''
+        })
+      }
+    }
+    working = w
+    stacks = {}
+    selected = 0
+  })
+
+  const cards = $derived(
+    working
+      ? working.goalData.map((gd) => ({ gd, goal: goalMap.get(gd.goalId) })).filter((c) => c.goal)
+      : []
+  )
+  const isFinal = $derived(working?.status === 'final')
+
+  // ---- autosave (drafts save on every change, debounced) ----
+  let saveTimer = null
+  let saveState = $state('saved') // 'pending' | 'saved'
+
+  function scheduleSave() {
+    if (!working) return
+    saveState = 'pending'
+    clearTimeout(saveTimer)
+    saveTimer = setTimeout(flush, 400)
+  }
+
+  async function flush() {
+    clearTimeout(saveTimer)
+    saveTimer = null
+    if (!working) return
+    const saved = await putRecord('sessions', $state.snapshot(working))
+    if (saved) saveState = 'saved'
+  }
+
+  onDestroy(() => {
+    if (saveTimer) flush()
+  })
+
+  // Lock must not lose pending debounced edits: repo.lockNow() awaits this
+  // flush while the key is still valid, then wipes.
+  $effect(() => {
+    const off = onBeforeLock(flush)
+    return off
+  })
+
+  // ---- O auto-generation: live from trial data unless hand-edited ----
+  const autoO = $derived(
+    working && client ? generateO(client.code, $goals, working.goalData, working.observations) : ''
+  )
+
+  // Never regenerate on a finalized session — Finalize locks the note until
+  // an explicit Reopen (spec §5.4), even if the goal's label changed since.
+  $effect(() => {
+    if (working && working.status !== 'final' && !working.oEdited && working.soap.O !== autoO) {
+      working.soap.O = autoO
+      scheduleSave()
+    }
+  })
+
+  // ---- trial taps + undo ----
+  function tap(gd, correct) {
+    if (!gd || isFinal) return
+    gd.trials ??= { correct: 0, total: 0 }
+    gd.trials.total++
+    if (correct) gd.trials.correct++
+    ;(stacks[gd.goalId] ??= []).push(correct)
+    scheduleSave()
+  }
+
+  function undo(gd) {
+    if (!gd || isFinal) return
+    const stack = stacks[gd.goalId]
+    if (!stack?.length || !gd.trials) return
+    const wasCorrect = stack.pop()
+    gd.trials.total = Math.max(0, gd.trials.total - 1)
+    if (wasCorrect) gd.trials.correct = Math.max(0, gd.trials.correct - 1)
+    if (gd.trials.total === 0) gd.trials = null
+    scheduleSave()
+  }
+
+  // ---- keyboard driving (spec §5.4): arrows select, c/x score, z undoes ----
+  function onKey(e) {
+    if (!working || isFinal || !cards.length) return
+    const tag = e.target?.tagName
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+    if (e.metaKey || e.ctrlKey || e.altKey) return
+    const k = e.key.toLowerCase()
+    if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+      selected = Math.min(selected + 1, cards.length - 1)
+      e.preventDefault()
+    } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+      selected = Math.max(selected - 1, 0)
+      e.preventDefault()
+    } else if (k === 'c') {
+      tap(cards[selected]?.gd, true)
+      e.preventDefault()
+    } else if (k === 'x') {
+      tap(cards[selected]?.gd, false)
+      e.preventDefault()
+    } else if (k === 'z') {
+      undo(cards[selected]?.gd)
+      e.preventDefault()
+    }
+  }
+
+  // Empty number/date inputs bind null in Svelte 5 — never let that reach a
+  // stored session ("SOAP NOTE — JD — … — null min — …" in a pasted note).
+  function coerceHeaderFields() {
+    working.durationMin = Math.max(1, Math.round(Number(working.durationMin) || 30))
+    if (!working.date) working.date = todayISO()
+  }
+
+  async function finalize() {
+    coerceHeaderFields()
+    working.status = 'final'
+    await flush()
+  }
+
+  async function reopen() {
+    working.status = 'draft'
+    await flush()
+  }
+
+  // ---- phrase chips ----
+  const clientSessions = $derived(
+    working
+      ? $sessions
+          .filter((s) => s.clientId === working.clientId)
+          .map((s) => (s.id === working.id ? $state.snapshot(working) : s))
+      : []
+  )
+  const aChips = $derived(
+    working ? [...aSuggestions($state.snapshot(working), goalMap, clientSessions), ...effectiveBank($appSettings, 'A')] : []
+  )
+  const pChips = $derived(
+    working ? [...pSuggestions($state.snapshot(working), goalMap), ...effectiveBank($appSettings, 'P')] : []
+  )
+
+  function addObservation(chip) {
+    working.observations = appendPhrase(working.observations, chip)
+    // Once O is hand-edited the regeneration effect is paused, so the chip
+    // must also land in the visible O text directly or it would never reach
+    // the note (spec §6: observations appendable via chips).
+    if (working.oEdited) working.soap.O = appendPhrase(working.soap.O, chip)
+    scheduleSave()
+  }
+
+  function regenerateO() {
+    working.oEdited = false
+    working.soap.O = autoO
+    scheduleSave()
+  }
+</script>
+
+<!-- pagehide: best-effort flush of pending edits on tab close/navigation -->
+<svelte:window onkeydown={onKey} onpagehide={() => saveTimer && flush()} />
+
+{#if !working || !client}
+  <p class="muted">Session not found. <a href="#/clients">Back to caseload</a></p>
+{:else}
+  <div class="toolbar no-print">
+    <a href="#/client/{client.id}">← {client.code}</a>
+    <span class="muted" aria-live="polite">{saveState === 'saved' ? 'Saved' : 'Saving…'}</span>
+    <div class="right toolbar" style="margin-bottom:0">
+      {#if isFinal}
+        <span class="tag good">finalized</span>
+        <button onclick={reopen}>Reopen</button>
+      {:else}
+        <button onclick={finalize}>Finalize</button>
+      {/if}
+      <a href="#/session/{working.id}/note"><button class="btn-primary">View note</button></a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="field-row">
+      <div class="field" style="margin-bottom:0">
+        <label for="sess-date">Date</label>
+        <input
+          id="sess-date"
+          type="date"
+          bind:value={working.date}
+          disabled={isFinal}
+          onchange={() => {
+            coerceHeaderFields()
+            scheduleSave()
+          }}
+        />
+      </div>
+      <div class="field" style="margin-bottom:0">
+        <label for="sess-dur">Duration (min)</label>
+        <input
+          id="sess-dur"
+          type="number"
+          min="1"
+          bind:value={working.durationMin}
+          disabled={isFinal}
+          onchange={() => {
+            coerceHeaderFields()
+            scheduleSave()
+          }}
+          style="width:80px"
+        />
+      </div>
+      <div class="field" style="margin-bottom:0">
+        <label for="sess-setting">Setting</label>
+        <select
+          id="sess-setting"
+          bind:value={working.setting}
+          disabled={isFinal}
+          onchange={scheduleSave}
+        >
+          {#each SESSION_SETTINGS as s}
+            <option value={s}>{s}</option>
+          {/each}
+        </select>
+      </div>
+      <p class="kbd-hint right" style="margin:0">
+        <kbd>↑</kbd><kbd>↓</kbd> select goal · <kbd>C</kbd> correct · <kbd>X</kbd> incorrect ·
+        <kbd>Z</kbd> undo
+      </p>
+    </div>
+  </div>
+
+  {#if cards.length === 0}
+    <p class="muted">
+      No active goals for this client. <a href="#/client/{client.id}">Add goals first.</a>
+    </p>
+  {/if}
+
+  {#each cards as { gd, goal }, i (gd.goalId)}
+    <GoalCard
+      {goal}
+      {gd}
+      selected={i === selected && !isFinal}
+      disabled={isFinal}
+      canUndo={(stacks[gd.goalId]?.length ?? 0) > 0}
+      ontap={(correct) => {
+        selected = i
+        tap(gd, correct)
+      }}
+      onundo={() => undo(gd)}
+      onchange={scheduleSave}
+    />
+  {/each}
+
+  <PhraseSection
+    label="S — Subjective"
+    chips={effectiveBank($appSettings, 'S')}
+    bind:value={working.soap.S}
+    disabled={isFinal}
+    onchange={scheduleSave}
+    placeholder="Arrival, mood, engagement, reports from teacher/parent…"
+  />
+
+  <section class="card">
+    <h3>O — Objective (auto-generated from trial data)</h3>
+    <p class="hint">
+      Updates live as you tap trials{working.oEdited ? ' — paused because you edited it' : ''}.
+    </p>
+    <div class="chips">
+      {#each effectiveBank($appSettings, 'O') as chip}
+        <button type="button" class="chip" disabled={isFinal} onclick={() => addObservation(chip)}>
+          {chip}
+        </button>
+      {/each}
+    </div>
+    <textarea
+      rows="4"
+      bind:value={working.soap.O}
+      disabled={isFinal}
+      oninput={() => {
+        working.oEdited = true
+        scheduleSave()
+      }}
+    ></textarea>
+    {#if working.oEdited && !isFinal}
+      <button class="btn-quiet" onclick={regenerateO}>Regenerate from data</button>
+    {/if}
+  </section>
+
+  <PhraseSection
+    label="A — Assessment"
+    hint="Numbered suggestions are computed from this session's data."
+    chips={aChips}
+    bind:value={working.soap.A}
+    disabled={isFinal}
+    onchange={scheduleSave}
+    placeholder="Progress statements, response to cues, comparison with previous sessions…"
+  />
+
+  <PhraseSection
+    label="P — Plan"
+    chips={pChips}
+    bind:value={working.soap.P}
+    disabled={isFinal}
+    onchange={scheduleSave}
+    placeholder="Next steps, cue fading, generalization, home practice…"
+  />
+{/if}

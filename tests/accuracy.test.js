@@ -1,0 +1,52 @@
+import { describe, it, expect } from 'vitest'
+import { accuracyPct } from '../src/lib/ogen.js'
+import { streakFromPoints, goalCriterionStatus } from '../src/lib/progress.js'
+
+describe('accuracy calculation', () => {
+  it('computes rounded percentages', () => {
+    expect(accuracyPct(8, 10)).toBe(80)
+    expect(accuracyPct(1, 3)).toBe(33)
+    expect(accuracyPct(2, 3)).toBe(67)
+    expect(accuracyPct(10, 10)).toBe(100)
+    expect(accuracyPct(0, 10)).toBe(0)
+  })
+
+  it('handles zero and missing totals', () => {
+    expect(accuracyPct(0, 0)).toBe(0)
+    expect(accuracyPct(5, 0)).toBe(0)
+    expect(accuracyPct(0, undefined)).toBe(0)
+  })
+})
+
+describe('criterion streaks', () => {
+  const pts = (values) => values.map((pct, i) => ({ pct, date: `2026-01-0${i + 1}` }))
+
+  it('counts consecutive sessions at/above target from the end', () => {
+    expect(streakFromPoints(pts([50, 90, 85]), 80)).toBe(2)
+    expect(streakFromPoints(pts([90, 90, 70]), 80)).toBe(0)
+    expect(streakFromPoints(pts([80, 80, 80]), 80)).toBe(3)
+    expect(streakFromPoints([], 80)).toBe(0)
+  })
+
+  it('reports met/nearing status', () => {
+    const goal = {
+      id: 'g1',
+      targetCriterion: { accuracyPct: 80, consecutiveSessions: 3, cueLevel: 'minimal' }
+    }
+    const mkSession = (date, correct, total) => ({
+      id: `s${date}`,
+      date,
+      createdAt: 1,
+      goalData: [{ goalId: 'g1', trials: { correct, total }, cueLevel: 'minimal' }]
+    })
+    const sessions = [
+      mkSession('2026-01-01', 5, 10), // 50%
+      mkSession('2026-01-02', 9, 10), // 90%
+      mkSession('2026-01-03', 8, 10) // 80%
+    ]
+    const st = goalCriterionStatus(goal, sessions)
+    expect(st.streak).toBe(2)
+    expect(st.met).toBe(false)
+    expect(st.nearing).toBe(true) // 2 of 3 ≥ ceil(3/2)
+  })
+})

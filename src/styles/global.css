@@ -1,0 +1,606 @@
+/* Low-stimulation design system: muted palette, generous whitespace, plain CSS
+   custom properties only — no framework (spec §1). Optimized for a low-spec
+   laptop: no shadows-on-everything, no animation loops, big touch targets. */
+
+:root {
+  --bg: #f6f4f0;
+  --surface: #ffffff;
+  --ink: #2b2f33;
+  --muted: #6b7280;
+  --line: #e3e0da;
+  --accent: #3a5a78;
+  --accent-ink: #ffffff;
+  --accent-soft: #e7edf3;
+  --good: #4a7c59;
+  --good-soft: #e9f2ec;
+  --bad: #a05252;
+  --bad-soft: #f6ecec;
+  --warn-soft: #f7f1e3;
+  --radius: 10px;
+  --font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --mono: ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+h1,
+h2,
+h3 {
+  line-height: 1.25;
+  margin: 0 0 0.5rem;
+}
+
+h1 {
+  font-size: 1.4rem;
+}
+h2 {
+  font-size: 1.15rem;
+}
+h3 {
+  font-size: 1rem;
+}
+
+a {
+  color: var(--accent);
+}
+
+.container {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 1rem 1rem 4rem;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.hint {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin: 0.15rem 0 0.5rem;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+/* ---- forms ---- */
+
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.5rem 0.6rem;
+  max-width: 100%;
+}
+
+textarea {
+  width: 100%;
+  resize: vertical;
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+label {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-bottom: 0.15rem;
+}
+
+.field {
+  margin-bottom: 0.75rem;
+}
+
+.field-row {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+/* ---- buttons ---- */
+
+button {
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.5rem 0.9rem;
+  cursor: pointer;
+  min-height: 40px;
+}
+
+button:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #2f4a63;
+}
+
+.btn-danger {
+  background: var(--bad);
+  border-color: var(--bad);
+  color: #fff;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: #8a4444;
+}
+
+.btn-quiet {
+  border-color: transparent;
+  background: transparent;
+  color: var(--accent);
+}
+
+/* ---- chips ---- */
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.4rem 0;
+}
+
+.chip {
+  font-size: 0.85rem;
+  padding: 0.25rem 0.65rem;
+  min-height: 32px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  border: 1px solid transparent;
+  color: var(--ink);
+}
+
+.chip:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.chip.active {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+/* ---- header ---- */
+
+.app-header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  padding: 0.5rem 1rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.app-header .brand {
+  font-weight: 700;
+  color: var(--ink);
+  text-decoration: none;
+  font-size: 1.05rem;
+}
+
+.app-header nav {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.app-header nav a {
+  text-decoration: none;
+  color: var(--muted);
+  padding: 0.25rem 0.5rem;
+  border-radius: 6px;
+}
+
+.app-header nav a.active,
+.app-header nav a:hover {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.app-header .spacer {
+  flex: 1;
+}
+
+.backup-status {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.banner {
+  background: var(--warn-soft);
+  border: 1px solid #e5d9b8;
+  border-radius: var(--radius);
+  padding: 0.6rem 1rem;
+  margin: 0.75rem auto 0;
+  max-width: 880px;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+/* ---- badges / tags ---- */
+
+.tag {
+  display: inline-block;
+  font-size: 0.75rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.tag.good {
+  background: var(--good-soft);
+  color: var(--good);
+}
+
+.tag.warn {
+  background: var(--warn-soft);
+  color: #8a6d1d;
+}
+
+.tag.quiet {
+  background: var(--bg);
+  color: var(--muted);
+}
+
+/* ---- session goal cards ---- */
+
+.goal-card {
+  background: var(--surface);
+  border: 2px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.85rem;
+  margin-bottom: 0.85rem;
+}
+
+.goal-card.selected {
+  border-color: var(--accent);
+}
+
+.goal-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+
+.readout {
+  font-family: var(--mono);
+  font-size: 1.35rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.readout .pct {
+  color: var(--accent);
+}
+
+.tap-row {
+  display: flex;
+  gap: 0.6rem;
+  margin-bottom: 0.6rem;
+}
+
+button.tap {
+  flex: 1;
+  min-height: 64px;
+  font-size: 1.1rem;
+  font-weight: 600;
+  border-radius: var(--radius);
+}
+
+button.tap.correct {
+  background: var(--good-soft);
+  border-color: var(--good);
+  color: var(--good);
+}
+
+button.tap.correct:hover:not(:disabled) {
+  background: var(--good);
+  color: #fff;
+}
+
+button.tap.incorrect {
+  background: var(--bad-soft);
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
+button.tap.incorrect:hover:not(:disabled) {
+  background: var(--bad);
+  color: #fff;
+}
+
+button.undo {
+  min-height: 64px;
+  min-width: 72px;
+}
+
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 0.4rem;
+}
+
+.seg button {
+  border: none;
+  border-radius: 0;
+  min-height: 36px;
+  padding: 0.25rem 0.7rem;
+  font-size: 0.85rem;
+}
+
+.seg button + button {
+  border-left: 1px solid var(--line);
+}
+
+.seg button.active {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.inline-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+@media (max-width: 640px) {
+  .inline-fields {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---- lists ---- */
+
+.row-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.row-item {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.7rem 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.row-item.clickable {
+  cursor: pointer;
+}
+
+.row-item.clickable:hover {
+  border-color: var(--accent);
+}
+
+/* ---- note output ---- */
+
+.note-text {
+  font-family: var(--mono);
+  font-size: 0.95rem;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1rem;
+  margin: 0;
+}
+
+/* ---- toast ---- */
+
+.toast {
+  position: fixed;
+  bottom: 1.25rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--ink);
+  color: #fff;
+  border-radius: 999px;
+  padding: 0.55rem 1.1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  z-index: 50;
+  max-width: 90vw;
+}
+
+.toast button {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  color: #fff;
+  min-height: 30px;
+  padding: 0.15rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+}
+
+/* ---- lock screen ---- */
+
+.lock-wrap {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.lock-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 2rem;
+  width: 100%;
+  max-width: 430px;
+}
+
+.lock-card input[type='password'] {
+  width: 100%;
+  font-size: 1.05rem;
+}
+
+.warning-box {
+  background: var(--warn-soft);
+  border: 1px solid #e5d9b8;
+  border-radius: 8px;
+  padding: 0.75rem;
+  font-size: 0.9rem;
+  margin: 0.75rem 0;
+}
+
+.error-text {
+  color: var(--bad);
+  font-size: 0.9rem;
+}
+
+/* ---- charts ---- */
+
+.chart-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.legend {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-top: 0.25rem;
+}
+
+.legend .swatch {
+  display: inline-block;
+  vertical-align: -1px;
+  margin-right: 0.3rem;
+}
+
+/* ---- utility ---- */
+
+.toolbar {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+
+.right {
+  margin-left: auto;
+}
+
+.kbd-hint {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.kbd-hint kbd {
+  font-family: var(--mono);
+  background: var(--accent-soft);
+  border-radius: 4px;
+  padding: 0 0.3rem;
+}
+
+.print-only {
+  display: none;
+}
+
+/* ---- print: the note view is the PDF path (spec §5.5) ---- */
+
+@media print {
+  body {
+    background: #fff;
+  }
+
+  .no-print,
+  .app-header,
+  .banner,
+  .toast {
+    display: none !important;
+  }
+
+  .container {
+    padding: 0;
+    max-width: none;
+  }
+
+  .note-text {
+    border: none;
+    padding: 0;
+    font-size: 11pt;
+  }
+
+  .print-only {
+    display: block;
+    margin-top: 2rem;
+    font-size: 11pt;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .chip,
+  button {
+    transition: background-color 120ms ease, border-color 120ms ease;
+  }
+}
