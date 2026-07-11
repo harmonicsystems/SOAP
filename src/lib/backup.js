@@ -50,6 +50,50 @@ export function mergeRecords(existing, incoming) {
   return [...byId.values()]
 }
 
+const normPhrase = (p) => (p ?? '').replace(/\s+/g, ' ').trim().toLowerCase()
+
+// Merge-mode settings policy: device preferences (auto-lock, therapist name,
+// phrase-bank overrides) stay LOCAL, but the corpus travels — imported
+// sessions can reference custom observation tag ids, so those definitions
+// MUST come along or the sessions' O sections silently lose their clauses.
+// Learned phrases/usage/domain tags merge additively for corpus portability.
+export function mergeCorpusSettings(local, incoming) {
+  const merged = { ...local }
+
+  // custom observation tags: additive by id, local definition wins on conflict
+  const localTagIds = new Set((local.customObsTags ?? []).map((t) => t.id))
+  merged.customObsTags = [
+    ...(local.customObsTags ?? []),
+    ...(incoming.customObsTags ?? []).filter((t) => !localTagIds.has(t.id))
+  ]
+
+  // learned phrases: additive per section, case/whitespace-insensitive
+  merged.learned = { ...(local.learned ?? {}) }
+  for (const section of ['S', 'O', 'A', 'P']) {
+    const localList = local.learned?.[section] ?? []
+    const have = new Set(localList.map(normPhrase))
+    merged.learned[section] = [
+      ...localList,
+      ...(incoming.learned?.[section] ?? []).filter((p) => !have.has(normPhrase(p)))
+    ]
+  }
+
+  // usage: per key, whichever side has more recorded uses wins
+  merged.phraseUsage = { ...(incoming.phraseUsage ?? {}) }
+  for (const [k, v] of Object.entries(local.phraseUsage ?? {})) {
+    const inc = merged.phraseUsage[k]
+    merged.phraseUsage[k] = !inc || (v.count ?? 0) >= (inc.count ?? 0) ? v : inc
+  }
+
+  // domain tags: union per key
+  merged.phraseDomains = { ...(incoming.phraseDomains ?? {}) }
+  for (const [k, v] of Object.entries(local.phraseDomains ?? {})) {
+    merged.phraseDomains[k] = [...new Set([...(merged.phraseDomains[k] ?? []), ...(v ?? [])])]
+  }
+
+  return merged
+}
+
 export function backupFilename(d = new Date()) {
   return `soap-backup-${todayISO(d)}.enc`
 }

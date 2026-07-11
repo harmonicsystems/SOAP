@@ -48,3 +48,24 @@ const OBS_BY_ID = new Map(OBSERVATION_TAGS.map((t) => [t.id, t]))
 export function observationTag(id) {
   return OBS_BY_ID.get(id) ?? null
 }
+
+// Resolve a tag id against built-ins AND the clinician's custom tags —
+// including archived ones, so notes from old sessions always render their
+// clauses even after a tag is retired.
+export function resolveObsTag(id, customTags = []) {
+  return OBS_BY_ID.get(id) ?? customTags.find((t) => t.id === id) ?? null
+}
+
+// Chips shown on a goal card: built-ins minus any the clinician hid, plus
+// active custom tags — plus any hidden/archived tag still selected in this
+// session, so a reopened draft can still un-toggle it.
+export function visibleObsTags(settings, selectedIds = []) {
+  const custom = settings?.customObsTags ?? []
+  const hidden = new Set(settings?.hiddenObsTags ?? [])
+  const selected = new Set(selectedIds)
+  const out = OBSERVATION_TAGS.filter((t) => !hidden.has(t.id) || selected.has(t.id))
+  for (const t of custom) {
+    if (!t.archived || selected.has(t.id)) out.push(t)
+  }
+  return out
+}

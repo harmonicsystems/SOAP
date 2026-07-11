@@ -13,7 +13,8 @@
     lastBackupAt
   } from '../lib/repo.js'
   import { packBackup, unpackBackup, saveBackupFile, backupFilename } from '../lib/backup.js'
-  import { DEFAULT_BANKS } from '../lib/phrasebanks.js'
+  import { DEFAULT_BANKS, phraseKey } from '../lib/phrasebanks.js'
+  import { OBSERVATION_TAGS, domainLabel } from '../lib/constants.js'
   import { toast } from '../lib/toast.js'
   import { daysAgoLabel } from '../lib/text.js'
 
@@ -149,6 +150,49 @@
     toast.show('Phrase banks reset to defaults')
   }
 
+  // ---- observation tags (round 3) ----
+  let newTagChip = $state('')
+  let newTagClause = $state('')
+
+  async function addObsTag() {
+    const chip = newTagChip.trim()
+    const clause = newTagClause.trim().replace(/\.+$/, '')
+    if (!chip || !clause) return
+    const custom = $appSettings.customObsTags ?? []
+    const exists = [...OBSERVATION_TAGS, ...custom].some(
+      (t) => t.chip.toLowerCase() === chip.toLowerCase()
+    )
+    if (exists) {
+      toast.show('A tag with that label already exists')
+      return
+    }
+    await saveSettings({
+      ...$appSettings,
+      customObsTags: [
+        ...custom,
+        { id: `custom-${crypto.randomUUID()}`, chip, clause, archived: false }
+      ]
+    })
+    newTagChip = newTagClause = ''
+    toast.show('Observation tag added')
+  }
+
+  async function setTagArchived(id, archived) {
+    await saveSettings({
+      ...$appSettings,
+      customObsTags: ($appSettings.customObsTags ?? []).map((t) =>
+        t.id === id ? { ...t, archived } : t
+      )
+    })
+  }
+
+  async function toggleBuiltinTag(id) {
+    const hidden = new Set($appSettings.hiddenObsTags ?? [])
+    if (hidden.has(id)) hidden.delete(id)
+    else hidden.add(id)
+    await saveSettings({ ...$appSettings, hiddenObsTags: [...hidden] })
+  }
+
   // ---- erase ----
   let eraseText = $state('')
 
@@ -280,12 +324,86 @@
           {#each learned as phrase (phrase)}
             <div class="row-item" style="padding:0.4rem 0.75rem">
               <span style="flex:1">{phrase}</span>
+              {#each $appSettings.phraseDomains?.[phraseKey(s, phrase)] ?? $appSettings.phraseDomains?.[phrase.toLowerCase()] ?? [] as d}
+                <span class="tag quiet">{domainLabel(d)}</span>
+              {/each}
               <button class="btn-quiet" onclick={() => removeLearnedPhrase(s, phrase)}>Remove</button>
             </div>
           {/each}
         </div>
       {/if}
     {/each}
+  {/if}
+</div>
+
+<div class="card">
+  <h2>Observation tags</h2>
+  <p class="hint">
+    The quick-tap “what happened this session?” chips on goal cards. Each tag writes its full
+    clause into the O section after the client code — e.g. chip “AAC modeled” → “S7 required
+    aided language modeling on the device.” Click a built-in tag to hide or show it. Custom tags
+    are archived, never deleted, so old notes keep their wording.
+  </p>
+
+  <h3 style="margin-top:0.75rem">Built-in</h3>
+  <div class="chips">
+    {#each OBSERVATION_TAGS as t (t.id)}
+      {@const hidden = ($appSettings.hiddenObsTags ?? []).includes(t.id)}
+      <button
+        type="button"
+        class="chip obs"
+        class:active={!hidden}
+        style={hidden ? 'opacity:0.45; text-decoration:line-through' : ''}
+        title={hidden ? `Hidden — click to show. Writes: “…${t.clause}.”` : `Writes: “…${t.clause}.” Click to hide.`}
+        onclick={() => toggleBuiltinTag(t.id)}
+      >
+        {t.chip}
+      </button>
+    {/each}
+  </div>
+
+  <h3 style="margin-top:0.75rem">Your tags</h3>
+  {#if ($appSettings.customObsTags ?? []).length === 0}
+    <p class="muted">None yet — add one below.</p>
+  {:else}
+    <div class="row-list">
+      {#each $appSettings.customObsTags ?? [] as t (t.id)}
+        <div class="row-item" style="padding:0.4rem 0.75rem">
+          <span class="chip obs active" style="pointer-events:none">{t.chip}</span>
+          <span class="muted" style="flex:1; font-size:0.85rem">…{t.clause}.</span>
+          {#if t.archived}
+            <span class="tag quiet">archived</span>
+            <button class="btn-quiet" onclick={() => setTagArchived(t.id, false)}>Restore</button>
+          {:else}
+            <button class="btn-quiet" onclick={() => setTagArchived(t.id, true)}>Archive</button>
+          {/if}
+        </div>
+      {/each}
+    </div>
+  {/if}
+
+  <div class="field-row" style="margin-top:0.75rem">
+    <div class="field" style="margin-bottom:0">
+      <label for="tag-chip">Chip label (short)</label>
+      <input id="tag-chip" bind:value={newTagChip} maxlength="24" placeholder="e.g., AAC modeled" style="width:180px" />
+    </div>
+    <div class="field" style="flex:1; min-width:260px; margin-bottom:0">
+      <label for="tag-clause">Clause (reads after the client code)</label>
+      <input
+        id="tag-clause"
+        bind:value={newTagClause}
+        placeholder="e.g., required aided language modeling on the device"
+        style="width:100%"
+      />
+    </div>
+    <button class="btn-primary" onclick={addObsTag} disabled={!newTagChip.trim() || !newTagClause.trim()}>
+      Add tag
+    </button>
+  </div>
+  {#if newTagClause.trim()}
+    <p class="hint" style="margin-top:0.4rem">
+      Preview: “JD {newTagClause.trim().replace(/\.+$/, '')}.”
+    </p>
   {/if}
 </div>
 

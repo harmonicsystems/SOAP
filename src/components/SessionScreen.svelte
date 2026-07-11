@@ -14,12 +14,13 @@
     savePhrase
   } from '../lib/repo.js'
   import { navigate } from '../lib/router.js'
-  import { todayISO } from '../lib/text.js'
-  import { SESSION_SETTINGS } from '../lib/constants.js'
+  import { todayISO, fmtDate } from '../lib/text.js'
+  import { SESSION_SETTINGS, visibleObsTags } from '../lib/constants.js'
   import { generateO } from '../lib/ogen.js'
   import { rankedBank } from '../lib/phrasebanks.js'
   import { aSuggestions, pSuggestions } from '../lib/suggest.js'
   import { appendPhrase } from '../lib/text.js'
+  import { isNearDuplicate } from '../lib/similarity.js'
   import { toast } from '../lib/toast.js'
   import GoalCard from './GoalCard.svelte'
   import PhraseSection from './PhraseSection.svelte'
@@ -37,6 +38,10 @@
   // mid-session (ranking adaptation applies to the NEXT session). Read via
   // get() so it is not a reactive dependency.
   let usageSnapshot = $state({})
+  // Ranking context, also frozen at load (round 3): this session's goal
+  // domains and the client's PREVIOUS session texts per section — used to
+  // demote just-used phrases and to power the finalize anti-repetition nudge.
+  let rankContext = $state({ domains: [], prev: { S: '', O: '', A: '', P: '' }, prevDate: null })
 
   // Load a working copy when the session id changes; merge in goals that were
   // added since the session was created. The guard prevents autosave echoes
@@ -64,6 +69,28 @@
     }
     working = w
     usageSnapshot = get(appSettings).phraseUsage ?? {}
+    // freeze this session's domains + the previous session's section texts
+    const gmap = new Map($goals.map((g) => [g.id, g]))
+    const domains = [...new Set(w.goalData.map((gd) => gmap.get(gd.goalId)?.domain).filter(Boolean))]
+    const prev = $sessions
+      .filter(
+        (s) =>
+          s.clientId === w.clientId &&
+          s.id !== w.id &&
+          (s.date < w.date || (s.date === w.date && (s.createdAt ?? 0) < (w.createdAt ?? 0)))
+      )
+      .sort((a, b) => a.date.localeCompare(b.date) || (a.createdAt ?? 0) - (b.createdAt ?? 0))
+      .at(-1)
+    rankContext = {
+      domains,
+      prev: {
+        S: prev?.soap?.S ?? '',
+        O: prev?.soap?.O ?? '',
+        A: prev?.soap?.A ?? '',
+        P: prev?.soap?.P ?? ''
+      },
+      prevDate: prev?.date ?? null
+    }
     stacks = {}
     selected = 0
   })
@@ -108,9 +135,20 @@
   // ---- O auto-generation: live from trial data unless hand-edited ----
   const autoO = $derived(
     working && client
-      ? generateO(client.code, $goals, working.goalData, working.observations, working.standout)
+      ? generateO(
+          client.code,
+          $goals,
+          working.goalData,
+          working.observations,
+          working.standout,
+          $appSettings.customObsTags ?? []
+        )
       : ''
   )
+
+  // Observation chips are computed PER CARD (each card only re-adds hidden or
+  // archived tags selected on THAT goal) — a session-wide union would render a
+  // hidden tag as freshly tappable on every other card, defeating the hide.
 
   // Never regenerate on a finalized session — Finalize locks the note until
   // an explicit Reopen (spec §5.4), even if the goal's label changed since.
@@ -176,6 +214,21 @@
 
   async function finalize() {
     coerceHeaderFields()
+    // Anti-repetition nudge (round 3): if S or A reads nearly the same as this
+    // client's previous note, ask — never block, never rewrite.
+    if (rankContext.prevDate) {
+      const repeated = []
+      if (isNearDuplicate(working.soap.S, rankContext.prev.S)) repeated.push('S')
+      if (isNearDuplicate(working.soap.A, rankContext.prev.A)) repeated.push('A')
+      if (repeated.length) {
+        const what =
+          repeated.length === 2 ? 'S and A sections read' : `${repeated[0]} section reads`
+        const ok = confirm(
+          `The ${what} nearly the same as this client's previous note (${fmtDate(rankContext.prevDate)}). Anything different today? OK finalizes as-is.`
+        )
+        if (!ok) return
+      }
+    }
     working.status = 'final'
     await flush()
   }
@@ -199,10 +252,14 @@
     working ? aSuggestions($state.snapshot(working), goalMap, clientSessions) : []
   )
   const pSug = $derived(working ? pSuggestions($state.snapshot(working), goalMap) : [])
-  const sBank = $derived(rankedBank($appSettings, 'S', usageSnapshot))
-  const oBank = $derived(rankedBank($appSettings, 'O', usageSnapshot))
-  const aBank = $derived(rankedBank($appSettings, 'A', usageSnapshot))
-  const pBank = $derived(rankedBank($appSettings, 'P', usageSnapshot))
+  const bankCtx = (section) => ({
+    domains: rankContext.domains,
+    prevText: rankContext.prev[section]
+  })
+  const sBank = $derived(rankedBank($appSettings, 'S', usageSnapshot, bankCtx('S')))
+  const oBank = $derived(rankedBank($appSettings, 'O', usageSnapshot, bankCtx('O')))
+  const aBank = $derived(rankedBank($appSettings, 'A', usageSnapshot, bankCtx('A')))
+  const pBank = $derived(rankedBank($appSettings, 'P', usageSnapshot, bankCtx('P')))
 
   function addObservation(chip) {
     working.observations = appendPhrase(working.observations, chip)
@@ -210,12 +267,13 @@
     // must also land in the visible O text directly or it would never reach
     // the note (spec §6: observations appendable via chips).
     if (working.oEdited) working.soap.O = appendPhrase(working.soap.O, chip)
-    recordPhraseUse(chip)
+    recordPhraseUse('O', chip)
     scheduleSave()
   }
 
   async function saveLearned(section, text) {
-    const added = await savePhrase(section, text)
+    // Tag the phrase with this session's goal domains for affinity ranking.
+    const added = await savePhrase(section, text, rankContext.domains)
     toast.show(added ? 'Phrase saved to your bank' : 'That phrase is already in your bank')
   }
 
@@ -306,6 +364,7 @@
     <GoalCard
       {goal}
       {gd}
+      obsTags={visibleObsTags($appSettings, gd.observations ?? [])}
       selected={i === selected && !isFinal}
       disabled={isFinal}
       canUndo={(stacks[gd.goalId]?.length ?? 0) > 0}
@@ -342,7 +401,7 @@
     bind:value={working.soap.S}
     disabled={isFinal}
     onchange={scheduleSave}
-    onuse={recordPhraseUse}
+    onuse={(chip) => recordPhraseUse('S', chip)}
     onsave={(text) => saveLearned('S', text)}
     placeholder="Arrival, mood, engagement, reports from teacher/parent…"
   />
@@ -381,7 +440,7 @@
     bind:value={working.soap.A}
     disabled={isFinal}
     onchange={scheduleSave}
-    onuse={recordPhraseUse}
+    onuse={(chip) => recordPhraseUse('A', chip)}
     onsave={(text) => saveLearned('A', text)}
     placeholder="Progress statements, response to cues, comparison with previous sessions…"
   />
@@ -393,7 +452,7 @@
     bind:value={working.soap.P}
     disabled={isFinal}
     onchange={scheduleSave}
-    onuse={recordPhraseUse}
+    onuse={(chip) => recordPhraseUse('P', chip)}
     onsave={(text) => saveLearned('P', text)}
     placeholder="Next steps, cue fading, generalization, home practice…"
   />

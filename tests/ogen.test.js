@@ -75,6 +75,19 @@ describe('observation sentences (§2)', () => {
     expect(observationSentence('JD', { observations: ['not-a-real-tag'] })).toBeNull()
   })
 
+  it('resolves custom tags — including archived ones so old notes still render', () => {
+    const customTags = [
+      { id: 'custom-aac', chip: 'AAC modeled', clause: 'required aided language modeling', archived: false },
+      { id: 'custom-old', chip: 'retired', clause: 'used the retired strategy', archived: true }
+    ]
+    expect(observationSentence('JD', { observations: ['custom-aac'] }, customTags)).toBe(
+      'JD required aided language modeling.'
+    )
+    expect(
+      observationSentence('JD', { observations: ['self-correct', 'custom-old'] }, customTags)
+    ).toBe('JD self-corrected errors independently and used the retired strategy.')
+  })
+
   it('appends a goal observation sentence after its trial sentence in O', () => {
     const goals = [{ id: 'g1', shortLabel: '/r/ in words', text: 'Will produce /r/…' }]
     const goalData = [

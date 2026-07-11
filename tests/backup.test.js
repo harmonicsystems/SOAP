@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { packBackup, unpackBackup, mergeRecords, backupFilename } from '../src/lib/backup.js'
+import {
+  packBackup,
+  unpackBackup,
+  mergeRecords,
+  mergeCorpusSettings,
+  backupFilename
+} from '../src/lib/backup.js'
 import { deriveKey, randomBytes } from '../src/lib/crypto.js'
 
 const ITER = 1000
@@ -51,5 +57,45 @@ describe('backup', () => {
 
   it('names the file soap-backup-YYYY-MM-DD.enc', () => {
     expect(backupFilename(new Date(2026, 6, 10))).toBe('soap-backup-2026-07-10.enc')
+  })
+
+  it('merge-mode settings: corpus travels, device preferences stay local', () => {
+    const local = {
+      autoLockMinutes: 5,
+      therapistName: 'local',
+      customObsTags: [{ id: 'custom-a', chip: 'local tag', clause: 'did local thing', archived: false }],
+      learned: { S: ['local phrase'], O: [], A: [], P: [] },
+      phraseUsage: { 'S:local phrase': { count: 2, lastUsedAt: 10 } },
+      phraseDomains: { 'S:local phrase': ['fluency'] }
+    }
+    const incoming = {
+      autoLockMinutes: 60,
+      therapistName: 'other device',
+      customObsTags: [
+        { id: 'custom-a', chip: 'conflicting', clause: 'other version', archived: true },
+        { id: 'custom-b', chip: 'AAC modeled', clause: 'required aided language modeling', archived: false }
+      ],
+      learned: { S: ['LOCAL PHRASE', 'imported phrase'], O: [], A: [], P: [] },
+      phraseUsage: {
+        'S:local phrase': { count: 9, lastUsedAt: 5 },
+        'S:imported phrase': { count: 1, lastUsedAt: 3 }
+      },
+      phraseDomains: { 'S:local phrase': ['voice'] }
+    }
+    const merged = mergeCorpusSettings(local, incoming)
+    // device preferences: local wins
+    expect(merged.autoLockMinutes).toBe(5)
+    expect(merged.therapistName).toBe('local')
+    // custom tags: additive by id, local definition wins on conflict —
+    // imported sessions referencing custom-b MUST keep rendering
+    expect(merged.customObsTags).toHaveLength(2)
+    expect(merged.customObsTags.find((t) => t.id === 'custom-a').clause).toBe('did local thing')
+    expect(merged.customObsTags.find((t) => t.id === 'custom-b').chip).toBe('AAC modeled')
+    // learned: additive, case-insensitive dedup
+    expect(merged.learned.S).toEqual(['local phrase', 'imported phrase'])
+    // usage: higher count wins; domains: union
+    expect(merged.phraseUsage['S:local phrase'].count).toBe(9)
+    expect(merged.phraseUsage['S:imported phrase'].count).toBe(1)
+    expect(merged.phraseDomains['S:local phrase'].sort()).toEqual(['fluency', 'voice'])
   })
 })

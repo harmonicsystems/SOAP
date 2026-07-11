@@ -1,5 +1,5 @@
 // O-section auto-generation (spec §6): one sentence per goal from trial data.
-import { observationTag } from './constants.js'
+import { resolveObsTag } from './constants.js'
 
 export function accuracyPct(correct, total) {
   if (!total) return 0
@@ -23,9 +23,10 @@ function joinClauses(clauses) {
 
 // Second sentence per goal built from tapped observation tags (§2). Reads as
 // "{ClientCode} self-corrected errors independently and showed fatigue…".
-export function observationSentence(clientCode, gd) {
+// customTags includes archived tags so old sessions keep rendering correctly.
+export function observationSentence(clientCode, gd, customTags = []) {
   const clauses = (gd?.observations ?? [])
-    .map((id) => observationTag(id)?.clause)
+    .map((id) => resolveObsTag(id, customTags)?.clause)
     .filter(Boolean)
   if (!clauses.length) return null
   return `${clientCode} ${joinClauses(clauses)}.`
@@ -55,7 +56,7 @@ export function goalSentence(clientCode, goal, gd) {
 // observations, then the one-line "what stood out" note. A goal with tapped
 // observations but no trials still contributes its observation sentence — the
 // clinician recorded something real about it.
-export function generateO(clientCode, goalList, goalData, observations = '', standout = '') {
+export function generateO(clientCode, goalList, goalData, observations = '', standout = '', customTags = []) {
   const byId = new Map(goalList.map((g) => [g.id, g]))
   const parts = []
   for (const gd of goalData ?? []) {
@@ -63,7 +64,7 @@ export function generateO(clientCode, goalList, goalData, observations = '', sta
     if (!goal) continue
     const trial = goalSentence(clientCode, goal, gd)
     if (trial) parts.push(trial)
-    const obs = observationSentence(clientCode, gd)
+    const obs = observationSentence(clientCode, gd, customTags)
     if (obs) parts.push(obs)
   }
   const chipObs = (observations ?? '').trim()

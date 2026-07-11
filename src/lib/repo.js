@@ -12,8 +12,8 @@ import {
   randomBytes,
   PBKDF2_ITERATIONS
 } from './crypto.js'
-import { mergeRecords } from './backup.js'
-import { effectiveBank } from './phrasebanks.js'
+import { mergeRecords, mergeCorpusSettings } from './backup.js'
+import { effectiveBank, phraseKey } from './phrasebanks.js'
 
 let key = null // in-memory only; wiped on lock; never persisted
 let lockGen = 0 // bumped on every lock; in-flight writes check it and bail
@@ -62,8 +62,16 @@ export function defaultSettings() {
     // Phrases the clinician saved from their own typing (§1). Kept separate
     // from phraseBanks so a shipped-defaults reset never wipes them.
     learned: { S: [], O: [], A: [], P: [] },
-    // Ranking signal for chips: { [phraseText]: { count, lastUsedAt } }.
-    phraseUsage: {}
+    // Ranking signal for chips: { [lowercasedText]: { count, lastUsedAt } }.
+    phraseUsage: {},
+    // Domain affinity for learned phrases: { [lowercasedText]: [domainIds] },
+    // captured from the session the phrase was saved in (round 3).
+    phraseDomains: {},
+    // Clinician-defined observation tags: [{id, chip, clause, archived}].
+    // Archived (never deleted) so old sessions keep rendering their clauses.
+    customObsTags: [],
+    // Built-in observation tag ids the clinician has hidden from goal cards.
+    hiddenObsTags: []
   }
 }
 
@@ -244,8 +252,10 @@ function normalizePhrase(text) {
 
 // Save a clinician-typed phrase into their learned corpus (§1). No-op on empty
 // or on a phrase already present (case-insensitive) in the base bank or learned
-// list, so the same line never appears twice. Returns true if added.
-export async function savePhrase(section, text) {
+// list, so the same line never appears twice. `domains` (the session's goal
+// domains) gives the phrase its affinity for domain-aware ranking (round 3).
+// Returns true if added.
+export async function savePhrase(section, text, domains = []) {
   if (!key) return false
   const phrase = normalizePhrase(text)
   if (!phrase) return false
@@ -256,7 +266,15 @@ export async function savePhrase(section, text) {
   if ([...base, ...learned].some((p) => p.toLowerCase() === lower)) return false
   const nextLearned = { ...(s.learned ?? { S: [], O: [], A: [], P: [] }) }
   nextLearned[section] = [...learned, phrase]
-  await saveSettings({ ...s, learned: nextLearned })
+  const next = { ...s, learned: nextLearned }
+  if (domains.length) {
+    // Section-scoped key: identical text in another section keeps its own tags.
+    next.phraseDomains = {
+      ...(s.phraseDomains ?? {}),
+      [phraseKey(section, phrase)]: [...new Set(domains)]
+    }
+  }
+  await saveSettings(next)
   return true
 }
 
@@ -266,21 +284,25 @@ export async function removeLearnedPhrase(section, text) {
   const learned = s.learned?.[section] ?? []
   const nextLearned = { ...(s.learned ?? { S: [], O: [], A: [], P: [] }) }
   nextLearned[section] = learned.filter((p) => p !== text)
-  // Drop its usage entry too so a re-added phrase starts fresh.
+  // Drop its usage and domain entries so a re-added phrase starts fresh —
+  // ONLY the section-scoped keys: identical text used as a chip in another
+  // section must keep its own accumulated state.
   const usage = { ...(s.phraseUsage ?? {}) }
-  delete usage[text.toLowerCase()]
-  await saveSettings({ ...s, learned: nextLearned, phraseUsage: usage })
+  delete usage[phraseKey(section, text)]
+  const phraseDomains = { ...(s.phraseDomains ?? {}) }
+  delete phraseDomains[phraseKey(section, text)]
+  await saveSettings({ ...s, learned: nextLearned, phraseUsage: usage, phraseDomains })
 }
 
 // Record a chip use for ranking (§1). Updates the in-memory store immediately
 // (so the next session's snapshot is fresh) and debounces the encrypted write —
 // a soft signal, so a dropped write on lock is harmless.
 let usageTimer = null
-export function recordPhraseUse(text) {
+export function recordPhraseUse(section, text) {
   if (!key) return
   const phrase = normalizePhrase(text)
   if (!phrase) return
-  const k = phrase.toLowerCase() // case-insensitive so counts never split by casing
+  const k = phraseKey(section, phrase) // section-scoped, case/whitespace-insensitive
   appSettings.update((s) => {
     const usage = { ...(s.phraseUsage ?? {}) }
     const cur = usage[k] ?? { count: 0, lastUsedAt: 0 }
@@ -396,7 +418,15 @@ export async function importData(data, mode) {
       }))
     )
   }
-  const settingsRec = mode === 'replace' && data.settings ? { ...data.settings, id: 'settings' } : null
+  // replace: take the backup's settings wholesale. merge: keep local device
+  // preferences but merge the corpus (custom tags MUST travel with sessions
+  // that reference them — see mergeCorpusSettings).
+  const settingsRec =
+    mode === 'replace' && data.settings
+      ? { ...data.settings, id: 'settings' }
+      : mode === 'merge' && data.settings
+        ? { ...mergeCorpusSettings(get(appSettings), data.settings), id: 'settings' }
+        : null
   const settingsRow = settingsRec
     ? { id: 'settings', updatedAt: Date.now(), blob: await encryptJSON(key, settingsRec) }
     : null

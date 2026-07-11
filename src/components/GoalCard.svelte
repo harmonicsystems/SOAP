@@ -5,6 +5,7 @@
   let {
     goal,
     gd,
+    obsTags = OBSERVATION_TAGS, // settings-aware list passed by SessionScreen
     selected = false,
     disabled = false,
     canUndo = false,
@@ -93,7 +94,7 @@
 
   <p class="hint" style="margin:0.5rem 0 0.15rem">What happened this session?</p>
   <div class="chips" aria-label="Observations">
-    {#each OBSERVATION_TAGS as t}
+    {#each obsTags as t (t.id)}
       <button
         type="button"
         class="chip obs"

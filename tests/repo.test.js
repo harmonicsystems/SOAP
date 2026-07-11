@@ -86,25 +86,46 @@ describe('encrypted repository', () => {
   it('learns phrases (dedup), records usage, and persists across lock/unlock', async () => {
     await repo.createVault('corpus test passphrase')
 
-    expect(await repo.savePhrase('S', '  needed  co-regulation before starting ')).toBe(true)
+    expect(
+      await repo.savePhrase('S', '  needed  co-regulation before starting ', [
+        'articulation-phonology'
+      ])
+    ).toBe(true)
     expect(get(repo.appSettings).learned.S).toEqual(['needed co-regulation before starting'])
+    // domain affinity stored under the SECTION-SCOPED key (round 3)
+    expect(
+      get(repo.appSettings).phraseDomains['S:needed co-regulation before starting']
+    ).toEqual(['articulation-phonology'])
 
     // duplicate (case-insensitive) is rejected; duplicate of a default too
     expect(await repo.savePhrase('S', 'Needed co-regulation before starting')).toBe(false)
     expect(await repo.savePhrase('S', 'transitioned willingly to the session')).toBe(false)
     expect(get(repo.appSettings).learned.S).toHaveLength(1)
 
-    repo.recordPhraseUse('needed co-regulation before starting')
-    repo.recordPhraseUse('needed co-regulation before starting')
-    expect(get(repo.appSettings).phraseUsage['needed co-regulation before starting'].count).toBe(2)
+    repo.recordPhraseUse('S', 'needed co-regulation before starting')
+    repo.recordPhraseUse('S', 'needed co-regulation before starting')
+    expect(
+      get(repo.appSettings).phraseUsage['S:needed co-regulation before starting'].count
+    ).toBe(2)
 
     // persists through a lock/unlock cycle (settings written eagerly on save)
     await repo.lockNow()
     expect(await repo.unlock('corpus test passphrase')).toBe(true)
     expect(get(repo.appSettings).learned.S).toEqual(['needed co-regulation before starting'])
 
+    // same text used as a chip in ANOTHER section keeps separate state…
+    repo.recordPhraseUse('O', 'needed co-regulation before starting')
     await repo.removeLearnedPhrase('S', 'needed co-regulation before starting')
     expect(get(repo.appSettings).learned.S).toEqual([])
-    expect(get(repo.appSettings).phraseUsage['needed co-regulation before starting']).toBeUndefined()
+    expect(
+      get(repo.appSettings).phraseUsage['S:needed co-regulation before starting']
+    ).toBeUndefined()
+    expect(
+      get(repo.appSettings).phraseDomains['S:needed co-regulation before starting']
+    ).toBeUndefined()
+    // …and that O-section state survives the S-section removal
+    expect(
+      get(repo.appSettings).phraseUsage['O:needed co-regulation before starting'].count
+    ).toBe(1)
   }, 30000)
 })

@@ -53,34 +53,105 @@ export function effectiveBank(settings, section) {
   return Array.isArray(override) ? override : DEFAULT_BANKS[section]
 }
 
+function normText(text) {
+  return (text ?? '').replace(/\s+/g, ' ').trim().toLowerCase()
+}
+
+// Canonical key for per-phrase state (usage counts, domain tags): whitespace-
+// collapsed, lowercased, and SCOPED BY SECTION — identical text living in two
+// sections must never share or clobber each other's ranking state.
+export function phraseKey(section, text) {
+  return `${section}:${normText(text)}`
+}
+
+const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+// Did this chip appear in the previous note? Slot-aware and boundary-safe:
+// {slot} placeholders are cut out and every remaining literal segment must
+// appear at word boundaries — so "recommend home practice: {activity}" is
+// recognized after its slot was filled in, while "reported a good week" does
+// NOT false-match against "reported a good weekend".
+export function usedInPrevText(chipText, prevText) {
+  const prev = normText(prevText)
+  if (!prev) return false
+  const segments = normText(chipText)
+    .split(/\{[^}]*\}/)
+    .map((s) => s.trim())
+    .filter((s) => s.length >= 4)
+  if (!segments.length) return false
+  return segments.every((seg) =>
+    new RegExp(`(?<![a-z0-9])${escapeRegex(seg)}(?![a-z0-9])`).test(prev)
+  )
+}
+
 // The session-screen bank: the editable base plus the clinician's own learned
 // phrases (§1), deduped, ranked so the phrases they actually reach for float to
-// the top. Ranking is by (use count desc, most-recent use desc, base order) —
-// authentic-by-construction because learned phrases are the clinician's words.
+// the top. Authentic-by-construction because learned phrases are the
+// clinician's words.
 //
-// `usage` is a snapshot ({text: {count, lastUsedAt}}); the caller freezes it at
-// mount so live taps don't reshuffle chips mid-session (adaptation shows up
-// next session, not jarringly under the finger).
-export function rankedBank(settings, section, usage = {}) {
+// Ranking, in precedence order (round 3):
+//   1. freshness — phrases that appeared in THIS client's previous note for
+//      this section sink to the bottom (rotation beats affinity: the whole
+//      point is not writing the same note twice);
+//   2. domain affinity — phrases tagged with a domain matching this session's
+//      goals float above untagged (neutral), which float above mismatched;
+//   3. usage — count desc, most-recent use desc;
+//   4. stable base order.
+//
+// `usage` is a snapshot ({lowercasedText: {count, lastUsedAt}}); the caller
+// freezes it (and `context`) at mount so live taps don't reshuffle chips
+// mid-session — adaptation shows up next session, not under the finger.
+// `context` = { domains: [domainIds of this session's goals],
+//               prevText: previous session's text for this section }.
+export function rankedBank(settings, section, usage = {}, context = {}) {
   const base = effectiveBank(settings, section) ?? []
   const learned = settings?.learned?.[section] ?? []
+  const domains = context.domains ?? []
+  const prevText = (context.prevText ?? '').toLowerCase()
+  const phraseDomains = settings?.phraseDomains ?? {}
   // Dedup case-insensitively (matching savePhrase), first occurrence wins so
-  // the base-bank casing is preferred over a learned duplicate. Usage is keyed
-  // the same way so counts for the same phrase never split across casings.
+  // the base-bank casing is preferred over a learned duplicate. Usage and
+  // domain tags are keyed the same way so they never split across casings.
   const seen = new Set()
   const list = []
   const add = (text, order, isLearned) => {
-    const k = text.toLowerCase()
+    const k = normText(text)
     if (seen.has(k)) return
     seen.add(k)
-    list.push({ text, order, learned: isLearned })
+    list.push({ text, key: k, order, learned: isLearned })
   }
   base.forEach((text, i) => add(text, i, false))
   learned.forEach((text, i) => add(text, base.length + i, true))
   return list
-    .map((e) => ({ ...e, u: usage[e.text.toLowerCase()] ?? { count: 0, lastUsedAt: 0 } }))
+    .map((e) => {
+      // Section-scoped key first; plain-text key accepted as a legacy
+      // fallback for state written before section scoping existed.
+      const sKey = phraseKey(section, e.text)
+      const tags = phraseDomains[sKey] ?? phraseDomains[e.key]
+      // matched=2, untagged/neutral=1, tagged-but-mismatched=0
+      const domainScore =
+        domains.length && Array.isArray(tags) && tags.length
+          ? tags.some((d) => domains.includes(d))
+            ? 2
+            : 0
+          : 1
+      // Slot-aware, boundary-safe: however the phrase got into last session's
+      // note (chip or typed, slots filled or not), it counts as "used last time".
+      const recentPenalty = usedInPrevText(e.text, prevText) ? 1 : 0
+      return {
+        ...e,
+        domainScore,
+        recentPenalty,
+        u: usage[sKey] ?? usage[e.key] ?? { count: 0, lastUsedAt: 0 }
+      }
+    })
     .sort(
-      (a, b) => b.u.count - a.u.count || b.u.lastUsedAt - a.u.lastUsedAt || a.order - b.order
+      (a, b) =>
+        a.recentPenalty - b.recentPenalty ||
+        b.domainScore - a.domainScore ||
+        b.u.count - a.u.count ||
+        b.u.lastUsedAt - a.u.lastUsedAt ||
+        a.order - b.order
     )
     .map((e) => e.text)
 }
