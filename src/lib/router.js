@@ -8,12 +8,14 @@ const ROUTES = [
   ['client/:id/progress', 'progress'],
   ['session/:id', 'session'],
   ['session/:id/note', 'note'],
-  ['settings', 'settings']
+  ['settings', 'settings'],
+  ['help', 'help']
 ]
 
-function parse() {
-  const hash = location.hash.replace(/^#\/?/, '')
-  const segs = hash.split('/').filter(Boolean)
+// Pure hash → {name, params} matcher (exported for testing without a DOM).
+export function matchRoute(hash) {
+  const path = (hash ?? '').replace(/^#\/?/, '')
+  const segs = path.split('/').filter(Boolean)
   for (const [pattern, name] of ROUTES) {
     const parts = pattern.split('/').filter(Boolean)
     if (parts.length !== segs.length) continue
@@ -26,6 +28,11 @@ function parse() {
     if (ok) return { name, params }
   }
   return { name: 'notfound', params: {} }
+}
+
+function parse() {
+  // Guard so the module can be imported in a non-DOM context (tests).
+  return matchRoute(typeof location !== 'undefined' ? location.hash : '')
 }
 
 export const route = readable(parse(), (set) => {

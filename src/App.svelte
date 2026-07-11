@@ -13,6 +13,7 @@
   import NoteOutput from './components/NoteOutput.svelte'
   import Progress from './components/Progress.svelte'
   import Settings from './components/Settings.svelte'
+  import Help from './components/Help.svelte'
 
   onMount(() => {
     checkVault()
@@ -23,6 +24,20 @@
   // Back button in an endless '#/' → '#/clients' loop.
   $effect(() => {
     if (!$locked && ($route.name === 'lock' || $route.name === 'notfound')) redirect('clients')
+  })
+
+  // If the app locks (auto-lock or manual) while the Help page is open, send the
+  // user to the lock screen — the standalone locked-Help view has no passphrase
+  // field. A prospective reader who opened Help *while already locked* never
+  // triggered a lock transition (seenUnlocked stays false), so they keep it.
+  let seenUnlocked = false
+  $effect(() => {
+    if (!$locked) {
+      seenUnlocked = true
+      return
+    }
+    if (seenUnlocked && $route.name === 'help') redirect('')
+    seenUnlocked = false
   })
 
   // Surface rows that failed decryption on unlock (corruption tolerance).
@@ -77,7 +92,13 @@
 </script>
 
 {#if $locked}
-  <LockScreen />
+  <!-- Help is readable before unlock so a prospective user can see the privacy,
+       AI-disclosure, and why sections before committing a passphrase. -->
+  {#if $route.name === 'help'}
+    <Help locked />
+  {:else}
+    <LockScreen />
+  {/if}
 {:else}
   <Header />
   <BackupBanner />
@@ -94,6 +115,8 @@
       <NoteOutput id={$route.params.id} />
     {:else if $route.name === 'settings'}
       <Settings />
+    {:else if $route.name === 'help'}
+      <Help />
     {/if}
   </main>
 {/if}

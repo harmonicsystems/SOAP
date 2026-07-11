@@ -591,6 +591,27 @@ button.undo {
   display: none;
 }
 
+/* Help page: in-page jump-link nav (hidden in print). */
+.help-toc {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.9rem;
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+}
+
+.help-toc a {
+  text-decoration: none;
+}
+
+.help-toc a:hover {
+  text-decoration: underline;
+}
+
 /* ---- print: the note view is the PDF path (spec §5.5) ---- */
 
 @media print {

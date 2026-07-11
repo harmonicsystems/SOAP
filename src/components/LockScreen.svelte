@@ -106,5 +106,8 @@
       All data stays on this device, encrypted. Nothing is ever sent anywhere. Clients are
       identified by initials or codes only — never full names.
     </p>
+    <p class="hint" style="margin-top:0.5rem">
+      <a href="#/help">About &amp; privacy</a>
+    </p>
   </div>
 </div>

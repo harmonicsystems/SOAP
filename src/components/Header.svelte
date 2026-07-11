@@ -15,6 +15,7 @@
       Caseload
     </a>
     <a href="#/settings" class:active={$route.name === 'settings'}>Settings</a>
+    <a href="#/help" class:active={$route.name === 'help'}>Help</a>
   </nav>
   <div class="spacer"></div>
   <span class="backup-status">{backupLabel}</span>
