@@ -74,9 +74,14 @@ hand-rolled SVG charts · `vite-plugin-pwa` (Workbox) · Vitest. Node 20.17 here
   separate `updateReady` slot for the PWA update prompt), `router.js` (`matchRoute` pure/testable,
   `navigate` push / `redirect` replace).
 
-**Components** — `App.svelte` (shell + routing + auto-lock), `LockScreen`, `Header`, `Caseload`,
-`ClientDetail`, `GoalBuilder`, `SessionScreen` (the core live screen), `GoalCard`, `PhraseSection`,
-`NoteOutput`, `Progress`, `Chart`/`Sparkline` (SVG), `Settings`, `Help`, `BackupBanner`, `Toast`.
+- `session.js` — `newSessionRecord(clientId, activeGoals, opts)`: the one builder for both
+  individual and group sessions (carries `groupId`). Used by ClientDetail and `repo.createGroup`.
+
+**Components** — `App.svelte` (shell + routing + auto-lock), `LockScreen`, `Header`, `Caseload`
+(+ group creation), `ClientDetail`, `GoalBuilder`, `SessionScreen` (core live screen; `embedded`
+prop for group use), `GoalCard`, `PhraseSection`, `NoteOutput`, `Progress`, `Chart`/`Sparkline`
+(SVG), `Settings`, `Help`, `GroupSession` (client-switcher wrapper reusing SessionScreen),
+`BackupBanner`, `Toast`.
 
 ## Data model (inside encrypted payloads)
 
@@ -85,9 +90,9 @@ Client:  { id, code, notes?, archived, createdAt }
 Goal:    { id, clientId, domain, text, shortLabel?,
            targetCriterion {accuracyPct, consecutiveSessions, cueLevel},
            baseline?, status: active|met|discontinued, createdAt }
-Session: { id, clientId, date, durationMin, setting, status: draft|final,
+Session: { id, clientId, groupId?, date, durationMin, setting, status: draft|final,
            soap {S, O, A, P}, oEdited, observations (O-chip text), standout (one-liner),
-           goalData: [GoalData], createdAt, updatedAt }
+           goalData: [GoalData], createdAt, updatedAt }   // groupId links group members
 GoalData:{ goalId, trials: {correct,total}|null, cueLevel, cueTypes: [],
            observations: [tagId], activity?, notes? }
 Setting: { id:'settings', autoLockMinutes, therapistName?,
@@ -151,6 +156,18 @@ Purpose: fight note monotony and capture what actually happened, deterministical
   the clinician's own words — never fabricated.** O-frame randomization deliberately NOT done
   (scannable consistency across sessions is a feature). No cloud voice-to-text (violates no-network).
 
+## Group sessions
+
+A group session is **N linked per-client `Session` records sharing a `groupId`** (2–4 students) —
+NOT a new multi-client type. Each student keeps a normal session and its own separate note; the
+group is only a shared data-entry surface. `createGroup` builds one session per client (seeded with
+that client's active goals, `setting: 'group'`). `GroupSession.svelte` is a thin wrapper: a client
+switcher + a `{#key}`-remounted `<SessionScreen embedded />` per student, so all the hardened
+per-session logic is reused, not forked. Remounting on switch flushes the outgoing student's
+autosave via `onDestroy`. Every per-client path (notes, progress, caseload, backup) works unchanged
+because the underlying records are ordinary sessions. Ranking/nudge naturally exclude other group
+members (they filter by `clientId`).
+
 ## Security & lock model
 
 App opens locked. Auto-lock after N idle minutes (configurable) or >5 min tab-hidden (a timer fires
@@ -167,7 +184,7 @@ vault); if the app locks *while on Help*, an effect routes to the lock screen.
 ```
 npm install
 npm run dev        # dev server (hot reload, no service worker)
-npm test           # vitest — 66 tests across lib (crypto, backup, corpus, note, router, …)
+npm test           # vitest — 71 tests across lib (crypto, backup, corpus, note, router, session, …)
 npm run build      # vite build + gzip bundle-size gate (fails > 120 KB)
 npm run preview    # serve the production build (has the service worker)
 npm run icons      # regenerate public/icon-*.png (zero-dep PNG encoder; only if the mark changes)
@@ -196,6 +213,6 @@ the note format, treat the corresponding test as the contract and re-audit claim
 ## Roadmap (discussed, not built)
 
 Corpus pack export/share · "suggested saves" (detect repeated typed lines — wants real usage data
-first) · **group sessions** (2–4 clients in one screen — structural; touches data model, session
-screen, note generation). Also pending: refine the Help "Why this exists" copy (David's voice),
-push to GitHub + deploy.
+first). Possible group-session polish: shared live editing of date/duration/activity across members
+(currently set at creation, then per-member), a flat all-cards tap surface. Also pending: refine the
+Help "Why this exists" copy (David's voice), push to GitHub + deploy.
