@@ -195,11 +195,13 @@ Keep them green and the bundle under budget — both gate the build/CI.
 
 ## Deployment
 
-Push to `main` → `.github/workflows/deploy.yml` (test → build+budget → `actions/deploy-pages`).
-One-time: repo Settings → Pages → Source: GitHub Actions; set custom domain (ships `public/CNAME`)
-and enforce HTTPS. DNS: `CNAME soap → harmonicsystems.github.io`. For Harmonic Systems repos push
-via the SSH alias `git@github-harmonicsystems:harmonicsystems/SOAP.git`. **Not yet pushed to GitHub
-as of this writing** — four local commits exist; the app has not been deployed.
+**Live at https://soap.harmonic-systems.org** — repo `harmonicsystems/SOAP` (public). Push to
+`main` → `.github/workflows/deploy.yml` (test → build+budget → `actions/deploy-pages`) auto-deploys.
+Remote uses the SSH alias `git@github-harmonicsystems:harmonicsystems/SOAP.git` (github.com would
+use the wrong key). One-time setup is DONE: Pages source = GitHub Actions, custom domain
+`soap.harmonic-systems.org` (also shipped as `public/CNAME`), HTTPS enforced; DNS `CNAME soap →
+harmonicsystems.github.io` was already in place. The nightly-cron habit note from other HS repos
+does not apply here (no cron in this workflow).
 
 ## How we work on this project
 
@@ -215,4 +217,4 @@ the note format, treat the corresponding test as the contract and re-audit claim
 Corpus pack export/share · "suggested saves" (detect repeated typed lines — wants real usage data
 first). Possible group-session polish: shared live editing of date/duration/activity across members
 (currently set at creation, then per-member), a flat all-cards tap surface. Also pending: refine the
-Help "Why this exists" copy (David's voice), push to GitHub + deploy.
+Help "Why this exists" copy (David's voice).
