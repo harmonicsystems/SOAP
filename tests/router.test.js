@@ -17,6 +17,7 @@ describe('hash route matching', () => {
     })
     expect(matchRoute('#/session/s1')).toEqual({ name: 'session', params: { id: 's1' } })
     expect(matchRoute('#/session/s1/note')).toEqual({ name: 'note', params: { id: 's1' } })
+    expect(matchRoute('#/group/grp1')).toEqual({ name: 'group', params: { groupId: 'grp1' } })
     expect(matchRoute('#/settings').name).toBe('settings')
   })
 

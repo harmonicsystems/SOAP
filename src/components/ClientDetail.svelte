@@ -4,7 +4,8 @@
   import { DOMAINS, domainLabel } from '../lib/constants.js'
   import { goalCriterionStatus, goalPoints } from '../lib/progress.js'
   import { shortLabelFor } from '../lib/ogen.js'
-  import { todayISO, fmtDate } from '../lib/text.js'
+  import { fmtDate } from '../lib/text.js'
+  import { newSessionRecord } from '../lib/session.js'
   import GoalBuilder from './GoalBuilder.svelte'
   import Sparkline from './Sparkline.svelte'
 
@@ -26,28 +27,7 @@
 
   async function newSession() {
     const active = clientGoals.filter((g) => g.status === 'active')
-    const rec = await putRecord('sessions', {
-      id: crypto.randomUUID(),
-      clientId: id,
-      date: todayISO(),
-      durationMin: 30,
-      setting: 'individual',
-      soap: { S: '', O: '', A: '', P: '' },
-      oEdited: false,
-      observations: '',
-      standout: '',
-      goalData: active.map((g) => ({
-        goalId: g.id,
-        trials: null,
-        cueLevel: g.targetCriterion?.cueLevel ?? 'minimal',
-        cueTypes: [],
-        observations: [],
-        activity: '',
-        notes: ''
-      })),
-      status: 'draft',
-      createdAt: Date.now()
-    })
+    const rec = await putRecord('sessions', newSessionRecord(id, active, { setting: 'individual' }))
     navigate(`session/${rec.id}`)
   }
 
@@ -169,6 +149,9 @@
           <strong>{fmtDate(session.date)}</strong>
           <span class="muted">{session.durationMin} min · {session.setting}</span>
           <span class="tag {session.status === 'final' ? 'good' : 'quiet'}">{session.status}</span>
+          {#if session.groupId}
+            <a href="#/group/{session.groupId}" class="tag">group ↗</a>
+          {/if}
           <div class="right toolbar" style="margin-bottom:0">
             <a href="#/session/{session.id}"><button>Open</button></a>
             <a href="#/session/{session.id}/note"><button>Note</button></a>

@@ -25,7 +25,9 @@
   import GoalCard from './GoalCard.svelte'
   import PhraseSection from './PhraseSection.svelte'
 
-  let { id } = $props()
+  // `embedded` = rendered inside the group-session screen (which owns the
+  // back navigation and client switcher), so drop the standalone back link.
+  let { id, embedded = false } = $props()
 
   const stored = $derived($sessions.find((s) => s.id === id))
   const client = $derived(stored && $clients.find((c) => c.id === stored.clientId))
@@ -291,7 +293,11 @@
   <p class="muted">Session not found. <a href="#/clients">Back to caseload</a></p>
 {:else}
   <div class="toolbar no-print">
-    <a href="#/client/{client.id}">← {client.code}</a>
+    {#if embedded}
+      <strong>{client.code}</strong>
+    {:else}
+      <a href="#/client/{client.id}">← {client.code}</a>
+    {/if}
     <span class="muted" aria-live="polite">{saveState === 'saved' ? 'Saved' : 'Saving…'}</span>
     <div class="right toolbar" style="margin-bottom:0">
       {#if isFinal}

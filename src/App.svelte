@@ -14,6 +14,7 @@
   import Progress from './components/Progress.svelte'
   import Settings from './components/Settings.svelte'
   import Help from './components/Help.svelte'
+  import GroupSession from './components/GroupSession.svelte'
 
   onMount(() => {
     checkVault()
@@ -111,6 +112,8 @@
       <Progress id={$route.params.id} />
     {:else if $route.name === 'session'}
       <SessionScreen id={$route.params.id} />
+    {:else if $route.name === 'group'}
+      <GroupSession groupId={$route.params.groupId} />
     {:else if $route.name === 'note'}
       <NoteOutput id={$route.params.id} />
     {:else if $route.name === 'settings'}

@@ -8,6 +8,7 @@ const ROUTES = [
   ['client/:id/progress', 'progress'],
   ['session/:id', 'session'],
   ['session/:id/note', 'note'],
+  ['group/:groupId', 'group'],
   ['settings', 'settings'],
   ['help', 'help']
 ]

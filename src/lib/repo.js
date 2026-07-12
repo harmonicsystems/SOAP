@@ -14,6 +14,7 @@ import {
 } from './crypto.js'
 import { mergeRecords, mergeCorpusSettings } from './backup.js'
 import { effectiveBank, phraseKey } from './phrasebanks.js'
+import { newSessionRecord } from './session.js'
 
 let key = null // in-memory only; wiped on lock; never persisted
 let lockGen = 0 // bumped on every lock; in-flight writes check it and bail
@@ -216,6 +217,21 @@ export async function deleteRecord(table, id) {
   await db[table].delete(id)
   stores[table].update((list) => list.filter((r) => r.id !== id))
   await touchModified()
+}
+
+// Create a group session: one linked per-client Session record per client,
+// sharing a groupId and the shared header (date/duration/setting). Each member
+// is seeded with that client's active goals. Returns the shared groupId.
+export async function createGroup(clientIds, opts = {}) {
+  if (!key) return null
+  const groupId = crypto.randomUUID()
+  const allGoals = get(goals)
+  for (const clientId of clientIds) {
+    const active = allGoals.filter((g) => g.clientId === clientId && g.status === 'active')
+    // a group session is always the 'group' setting — createGroup owns that
+    await putRecord('sessions', newSessionRecord(clientId, active, { ...opts, setting: 'group', groupId }))
+  }
+  return groupId
 }
 
 // Same cross-tab guard as putRecord: never write under a stale key after

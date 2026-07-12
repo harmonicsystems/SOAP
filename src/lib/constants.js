@@ -4,6 +4,12 @@ export const CUE_TYPES = ['verbal', 'visual', 'tactile', 'phonemic', 'gestural',
 
 export const SESSION_SETTINGS = ['individual', 'group', 'push-in', 'teletherapy']
 
+// A group session is 2–MAX linked per-client sessions entered on one screen.
+// School groups are typically 2–3; 4 leaves headroom for the occasional larger
+// group. A group of 1 is just an individual session.
+export const MIN_GROUP_SIZE = 2
+export const MAX_GROUP_SIZE = 4
+
 export const DOMAINS = [
   { id: 'receptive-language', label: 'Receptive language' },
   { id: 'expressive-language', label: 'Expressive language' },

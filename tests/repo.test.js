@@ -128,4 +128,28 @@ describe('encrypted repository', () => {
       get(repo.appSettings).phraseUsage['O:needed co-regulation before starting'].count
     ).toBe(1)
   }, 30000)
+
+  it('createGroup makes one linked session per client, sharing a groupId', async () => {
+    await repo.createVault('group test passphrase')
+    // three clients, each with a differing number of active goals
+    for (const [cid, code] of [['c1', 'JD'], ['c2', 'S12'], ['c3', 'AB']]) {
+      await repo.putRecord('clients', { id: cid, code, archived: false, createdAt: 1 })
+    }
+    await repo.putRecord('goals', { id: 'g1', clientId: 'c1', domain: 'articulation-phonology', text: 't', status: 'active', createdAt: 1 })
+    await repo.putRecord('goals', { id: 'g2', clientId: 'c1', domain: 'articulation-phonology', text: 't', status: 'discontinued', createdAt: 1 })
+    await repo.putRecord('goals', { id: 'g3', clientId: 'c2', domain: 'expressive-language', text: 't', status: 'active', createdAt: 1 })
+
+    const gid = await repo.createGroup(['c1', 'c2', 'c3'], { date: '2026-07-11', durationMin: 30 })
+    expect(typeof gid).toBe('string')
+
+    const members = get(repo.sessions).filter((s) => s.groupId === gid)
+    expect(members).toHaveLength(3)
+    expect(members.every((s) => s.setting === 'group' && s.date === '2026-07-11')).toBe(true)
+    expect(members.map((s) => s.clientId).sort()).toEqual(['c1', 'c2', 'c3'])
+    // only ACTIVE goals seed goalData; c1 has 1 active (g2 discontinued), c3 has none
+    expect(members.find((s) => s.clientId === 'c1').goalData.map((gd) => gd.goalId)).toEqual(['g1'])
+    expect(members.find((s) => s.clientId === 'c3').goalData).toEqual([])
+    // each member is an independent, individually-openable session record
+    expect(new Set(members.map((s) => s.id)).size).toBe(3)
+  }, 30000)
 })
