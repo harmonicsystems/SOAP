@@ -15,6 +15,12 @@ import {
 import { mergeRecords, mergeCorpusSettings } from './backup.js'
 import { effectiveBank, phraseKey } from './phrasebanks.js'
 import { newSessionRecord } from './session.js'
+import {
+  buildSampleDataset,
+  isSampleRecord,
+  sampleProvenance
+} from './sampleData.js'
+import { todayISO } from './text.js'
 
 let key = null // in-memory only; wiped on lock; never persisted
 let lockGen = 0 // bumped on every lock; in-flight writes check it and bail
@@ -186,18 +192,37 @@ async function touchModified() {
 }
 
 export async function putRecord(table, record) {
-  if (!key) return null // locked mid-write (e.g., stale autosave timer) — drop
+  const writeKey = key
+  if (!writeKey) return null // locked mid-write (e.g., stale autosave timer) — drop
   const gen = lockGen
+  const expectedEpoch = sessionEpoch
   const rec = { ...record, updatedAt: Date.now() }
-  const blob = await encryptJSON(key, rec)
-  // Cross-tab guard: never write under a stale key after another tab rekeyed.
-  const vault = await db.meta.get('vault')
-  if (vault && (vault.epoch ?? null) !== sessionEpoch) {
-    hardLock()
+  const blob = await encryptJSON(writeKey, rec)
+  // Cross-tab guard and write share one IndexedDB transaction, so a rekey,
+  // import, or sample reset cannot land between the epoch check and the put.
+  let stale = false
+  let observedEpoch = null
+  let wrote = false
+  await db.transaction('rw', [db.meta, db[table]], async () => {
+    const vault = await db.meta.get('vault')
+    observedEpoch = vault?.epoch ?? null
+    if (observedEpoch !== expectedEpoch) {
+      stale = true
+      return
+    }
+    if (lockGen !== gen || key !== writeKey) return
+    await db[table].put({ id: rec.id, updatedAt: rec.updatedAt, blob })
+    await db.meta.put({ key: 'lastModified', value: rec.updatedAt })
+    wrote = true
+  })
+  if (stale) {
+    // A same-tab exclusive operation may have intentionally advanced the
+    // epoch while this encryption was in flight. Drop the obsolete write but
+    // keep the now-current tab unlocked; an external epoch change still locks.
+    if (sessionEpoch !== observedEpoch) hardLock()
     return null
   }
-  if (lockGen !== gen || !key) return null // locked while we were encrypting
-  await db[table].put({ id: rec.id, updatedAt: rec.updatedAt, blob })
+  if (!wrote) return null
   if (lockGen !== gen) return rec // locked mid-write: row is valid, but leave wiped caches alone
   stores[table].update((list) => {
     const i = list.findIndex((r) => r.id === rec.id)
@@ -208,15 +233,225 @@ export async function putRecord(table, record) {
     }
     return [...list, rec]
   })
-  await touchModified()
+  lastModifiedAt.set(rec.updatedAt)
   return rec
 }
 
 export async function deleteRecord(table, id) {
-  if (!key) return
-  await db[table].delete(id)
+  const writeKey = key
+  if (!writeKey) return false
+  const gen = lockGen
+  const expectedEpoch = sessionEpoch
+  const modifiedAt = Date.now()
+  let stale = false
+  let observedEpoch = null
+  let deleted = false
+  await db.transaction('rw', [db.meta, db[table]], async () => {
+    const vault = await db.meta.get('vault')
+    observedEpoch = vault?.epoch ?? null
+    if (observedEpoch !== expectedEpoch) {
+      stale = true
+      return
+    }
+    if (lockGen !== gen || key !== writeKey) return
+    await db[table].delete(id)
+    await db.meta.put({ key: 'lastModified', value: modifiedAt })
+    deleted = true
+  })
+  if (stale) {
+    if (sessionEpoch !== observedEpoch) hardLock()
+    return false
+  }
+  if (!deleted) return false
+  if (lockGen !== gen) return true
   stores[table].update((list) => list.filter((r) => r.id !== id))
-  await touchModified()
+  lastModifiedAt.set(modifiedAt)
+  return true
+}
+
+// Install/reset the fictional longitudinal caseload as ordinary encrypted
+// records. Deterministic ids make retries safe after interruption. Settings
+// and the clinician's phrase corpus are deliberately untouched.
+function sampleConflictError(message, details = {}) {
+  return Object.assign(new Error(message), details)
+}
+
+function assertSampleModelIsSafe(data) {
+  const sampleCodes = new Set(data.clients.map((client) => client.code.toLowerCase()))
+  const conflicts = get(clients)
+    .filter(
+      (client) => !isSampleRecord(client) && sampleCodes.has(client.code?.toLowerCase())
+    )
+    .map((client) => client.code)
+  if (conflicts.length) throw sampleConflictError('sample-code-conflict', { conflicts })
+  for (const table of DATA_TABLES) {
+    const occupied = new Map(get(stores[table]).map((record) => [record.id, record]))
+    const conflict = data[table].find((record) => {
+      const existing = occupied.get(record.id)
+      return existing && !isSampleRecord(existing)
+    })
+    if (conflict) {
+      throw sampleConflictError('sample-id-conflict', { table, recordId: conflict.id })
+    }
+  }
+}
+
+async function assertNoRawSampleIdConflicts(data) {
+  for (const table of DATA_TABLES) {
+    const modelById = new Map(get(stores[table]).map((record) => [record.id, record]))
+    for (const record of data[table]) {
+      const row = await db[table].get(record.id)
+      const model = modelById.get(record.id)
+      if (row && (!model || !isSampleRecord(model))) {
+        throw sampleConflictError('sample-id-conflict', { table, recordId: record.id })
+      }
+    }
+  }
+}
+
+// Rotate first to quiesce other tabs before taking a destructive-operation
+// snapshot. putRecord/deleteRecord include meta in their transactions, so an
+// in-flight mutation either commits before this rotation (and is reloaded) or
+// observes the new epoch and aborts.
+async function beginExclusiveVaultChange() {
+  if (!key) return false
+  const expectedEpoch = sessionEpoch
+  const gen = lockGen
+  const epoch = crypto.randomUUID()
+  let stale = false
+  let changed = false
+  await db.transaction('rw', [db.meta], async () => {
+    const vault = await db.meta.get('vault')
+    if ((vault?.epoch ?? null) !== expectedEpoch) {
+      stale = true
+      return
+    }
+    if (lockGen !== gen || !key) return
+    await db.meta.put({ ...vault, epoch })
+    changed = true
+  })
+  if (stale) {
+    hardLock()
+    return false
+  }
+  if (!changed) return false
+  sessionEpoch = epoch
+  announceVaultChange()
+  return true
+}
+
+export async function installSampleDataset(anchorDate = todayISO()) {
+  if (!key) return false
+  const data = buildSampleDataset({ anchorDate })
+  // Avoid rotating/locking sibling tabs for an obvious local conflict.
+  assertSampleModelIsSafe(data)
+  if (!(await beginExclusiveVaultChange())) return false
+  await loadAll()
+  // Reload captures any other-tab write serialized before the epoch rotation.
+  assertSampleModelIsSafe(data)
+  await assertNoRawSampleIdConflicts(data)
+  const gen = lockGen
+  const expectedEpoch = sessionEpoch
+
+  const modifiedAt = Date.now()
+  const next = {}
+  const rows = {}
+  for (const table of DATA_TABLES) {
+    next[table] = data[table].map((record) => ({ ...record, updatedAt: modifiedAt }))
+    rows[table] = await Promise.all(
+      next[table].map(async (record) => ({
+        id: record.id,
+        updatedAt: record.updatedAt,
+        blob: await encryptJSON(key, record)
+      }))
+    )
+  }
+  if (lockGen !== gen || !key) return false
+
+  const idsToRemove = Object.fromEntries(
+    DATA_TABLES.map((table) => [
+      table,
+      get(stores[table]).filter((record) => isSampleRecord(record)).map((record) => record.id)
+    ])
+  )
+  const epoch = crypto.randomUUID()
+  let stale = false
+  let installed = false
+  await db.transaction('rw', [db.meta, db.clients, db.goals, db.sessions], async () => {
+    const vault = await db.meta.get('vault')
+    if ((vault?.epoch ?? null) !== expectedEpoch) {
+      stale = true
+      return
+    }
+    if (lockGen !== gen || !key) return
+    for (const table of DATA_TABLES) {
+      await db[table].bulkDelete(idsToRemove[table])
+      await db[table].bulkPut(rows[table])
+    }
+    await db.meta.put({ ...vault, epoch })
+    await db.meta.put({ key: 'lastModified', value: modifiedAt })
+    installed = true
+  })
+  if (stale) {
+    hardLock()
+    return false
+  }
+  if (!installed) return false
+  sessionEpoch = epoch
+  announceVaultChange()
+  for (const table of DATA_TABLES) {
+    stores[table].update((list) => [
+      ...list.filter((record) => !isSampleRecord(record)),
+      ...next[table]
+    ])
+  }
+  lastModifiedAt.set(modifiedAt)
+  return true
+}
+
+// Remove only records carrying the exact supported provenance marker. Delete
+// children before parents so an interrupted retry never leaves more orphans.
+export async function removeSampleDataset() {
+  if (!key) return false
+  if (!(await beginExclusiveVaultChange())) return false
+  await loadAll()
+  const gen = lockGen
+  const expectedEpoch = sessionEpoch
+  const ids = Object.fromEntries(
+    DATA_TABLES.map((table) => [
+      table,
+      get(stores[table]).filter((record) => isSampleRecord(record)).map((record) => record.id)
+    ])
+  )
+  if (Object.values(ids).every((list) => list.length === 0)) return true
+  const modifiedAt = Date.now()
+  const epoch = crypto.randomUUID()
+  let stale = false
+  let removed = false
+  await db.transaction('rw', [db.meta, db.clients, db.goals, db.sessions], async () => {
+    const vault = await db.meta.get('vault')
+    if ((vault?.epoch ?? null) !== expectedEpoch) {
+      stale = true
+      return
+    }
+    if (lockGen !== gen || !key) return
+    for (const table of ['sessions', 'goals', 'clients']) await db[table].bulkDelete(ids[table])
+    await db.meta.put({ ...vault, epoch })
+    await db.meta.put({ key: 'lastModified', value: modifiedAt })
+    removed = true
+  })
+  if (stale) {
+    hardLock()
+    return false
+  }
+  if (!removed) return false
+  sessionEpoch = epoch
+  announceVaultChange()
+  for (const table of DATA_TABLES) {
+    stores[table].update((list) => list.filter((record) => !isSampleRecord(record)))
+  }
+  lastModifiedAt.set(modifiedAt)
+  return true
 }
 
 // Create a group session: one linked per-client Session record per client,
@@ -226,38 +461,62 @@ export async function createGroup(clientIds, opts = {}) {
   if (!key) return null
   const groupId = crypto.randomUUID()
   const allGoals = get(goals)
+  const allClients = get(clients)
+  const chosenClients = clientIds
+    .map((id) => allClients.find((client) => client.id === id))
+    .filter(Boolean)
+  if (new Set(chosenClients.map((client) => isSampleRecord(client))).size > 1) return null
   for (const clientId of clientIds) {
     const active = allGoals.filter((g) => g.clientId === clientId && g.status === 'active')
+    const client = allClients.find((record) => record.id === clientId)
     // a group session is always the 'group' setting — createGroup owns that
-    await putRecord('sessions', newSessionRecord(clientId, active, { ...opts, setting: 'group', groupId }))
+    await putRecord('sessions', {
+      ...newSessionRecord(clientId, active, { ...opts, setting: 'group', groupId }),
+      ...sampleProvenance(client)
+    })
   }
   return groupId
 }
 
-// Same cross-tab guard as putRecord: never write under a stale key after
-// another tab rekeyed the vault (that would corrupt the settings row and
-// silently reset learned phrases on next unlock). Returns true on success.
-async function persistSettings(rec) {
-  if (!key) return false
-  const blob = await encryptJSON(key, rec)
-  const vault = await db.meta.get('vault')
-  if (vault && (vault.epoch ?? null) !== sessionEpoch) {
-    hardLock()
+// Same cross-tab guard as putRecord: the epoch check, encrypted settings write,
+// and (for user-authored settings changes) backup-staleness timestamp are one
+// transaction. `expectedEpoch` is captured before encryption so an autosave
+// already in flight cannot cross a sample reset/rekey boundary.
+async function persistSettings(rec, markModified = false) {
+  const writeKey = key
+  if (!writeKey) return false
+  const gen = lockGen
+  const expectedEpoch = sessionEpoch
+  const blob = await encryptJSON(writeKey, rec)
+  let stale = false
+  let observedEpoch = null
+  let wrote = false
+  await db.transaction('rw', [db.meta, db.settings], async () => {
+    const vault = await db.meta.get('vault')
+    observedEpoch = vault?.epoch ?? null
+    if (observedEpoch !== expectedEpoch) {
+      stale = true
+      return
+    }
+    if (lockGen !== gen || key !== writeKey) return
+    await db.settings.put({ id: 'settings', updatedAt: rec.updatedAt, blob })
+    if (markModified) await db.meta.put({ key: 'lastModified', value: rec.updatedAt })
+    wrote = true
+  })
+  if (stale) {
+    if (sessionEpoch !== observedEpoch) hardLock()
     return false
   }
-  if (!key) return false
-  await db.settings.put({ id: 'settings', updatedAt: rec.updatedAt, blob })
+  if (!wrote) return false
+  if (markModified) lastModifiedAt.set(rec.updatedAt)
   return true
 }
 
 export async function saveSettings(next) {
   if (!key) return
   const rec = { ...next, id: 'settings', updatedAt: Date.now() }
-  if (!(await persistSettings(rec))) return // stale key / locked — drop
+  if (!(await persistSettings(rec, true))) return // stale key / locked — drop
   appSettings.set(rec)
-  // Settings (phrase banks, therapist name) are part of backups too — the
-  // backup-staleness nag must see these changes.
-  await touchModified()
 }
 
 // Normalize a phrase for the corpus: single-line, trimmed. Case preserved so
@@ -333,6 +592,7 @@ export function recordPhraseUse(section, text) {
 }
 
 export async function changePassphrase(currentPass, newPass) {
+  const expectedEpoch = sessionEpoch
   const vault = await db.meta.get('vault')
   const cur = await deriveKey(currentPass, vault.salt, vault.iterations)
   if (!(await checkVerification(cur, vault.check))) return false
@@ -358,11 +618,21 @@ export async function changePassphrase(currentPass, newPass) {
     updatedAt: Date.now(),
     blob: await encryptJSON(newKey, settingsRec)
   }
+  let stale = false
   await db.transaction('rw', [db.meta, db.clients, db.goals, db.sessions, db.settings], async () => {
+    const liveVault = await db.meta.get('vault')
+    if ((liveVault?.epoch ?? null) !== expectedEpoch) {
+      stale = true
+      return
+    }
     for (const t of DATA_TABLES) await db[t].bulkPut(rows[t])
     await db.settings.put(settingsRow)
     await db.meta.put({ key: 'vault', salt, iterations: PBKDF2_ITERATIONS, check, epoch })
   })
+  if (stale) {
+    hardLock()
+    return false
+  }
   key = newKey
   sessionEpoch = epoch
   announceVaultChange() // other tabs hard-lock; their stale key must not write
@@ -414,6 +684,7 @@ export async function markBackupDone() {
 
 export async function importData(data, mode) {
   if (!key) return
+  const expectedEpoch = sessionEpoch
   const incoming = {
     clients: data.clients ?? [],
     goals: data.goals ?? [],
@@ -450,7 +721,13 @@ export async function importData(data, mode) {
   // imported data with their stale in-memory copies. Same key, new epoch.
   const vault = await db.meta.get('vault')
   const epoch = crypto.randomUUID()
+  let stale = false
   await db.transaction('rw', [db.meta, db.clients, db.goals, db.sessions, db.settings], async () => {
+    const liveVault = await db.meta.get('vault')
+    if ((liveVault?.epoch ?? null) !== expectedEpoch) {
+      stale = true
+      return
+    }
     for (const t of DATA_TABLES) {
       if (mode === 'replace') await db[t].clear()
       await db[t].bulkPut(rows[t])
@@ -458,9 +735,14 @@ export async function importData(data, mode) {
     if (settingsRow) await db.settings.put(settingsRow)
     await db.meta.put({ ...vault, epoch })
   })
+  if (stale) {
+    hardLock()
+    return false
+  }
   sessionEpoch = epoch
   announceVaultChange()
   for (const t of DATA_TABLES) stores[t].set(next[t])
   if (settingsRec) appSettings.set(settingsRec)
   await touchModified()
+  return true
 }

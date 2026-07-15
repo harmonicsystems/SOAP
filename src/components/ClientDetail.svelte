@@ -6,8 +6,10 @@
   import { shortLabelFor } from '../lib/ogen.js'
   import { fmtDate } from '../lib/text.js'
   import { newSessionRecord } from '../lib/session.js'
+  import { sampleProvenance } from '../lib/sampleData.js'
   import GoalBuilder from './GoalBuilder.svelte'
   import Sparkline from './Sparkline.svelte'
+  import SampleTag from './SampleTag.svelte'
 
   let { id } = $props()
 
@@ -27,7 +29,10 @@
 
   async function newSession() {
     const active = clientGoals.filter((g) => g.status === 'active')
-    const rec = await putRecord('sessions', newSessionRecord(id, active, { setting: 'individual' }))
+    const rec = await putRecord('sessions', {
+      ...newSessionRecord(id, active, { setting: 'individual' }),
+      ...sampleProvenance(client)
+    })
     navigate(`session/${rec.id}`)
   }
 
@@ -60,6 +65,7 @@
 
   <div class="toolbar">
     <h1 style="margin:0">{client.code}</h1>
+    {#if client.sample}<SampleTag />{/if}
     {#if client.archived}<span class="tag quiet">archived</span>{/if}
     <div class="right toolbar" style="margin-bottom:0">
       <button class="btn-primary" onclick={newSession}>New session</button>
@@ -99,6 +105,7 @@
       <GoalBuilder
         clientId={client.id}
         goal={editingGoal === 'new' ? null : editingGoal}
+        sampleSource={client}
         onclose={() => (editingGoal = null)}
       />
     {/key}

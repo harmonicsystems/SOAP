@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { accuracyPct } from '../src/lib/ogen.js'
-import { streakFromPoints, goalCriterionStatus } from '../src/lib/progress.js'
+import { streakFromPoints, goalCriterionStatus, progressSummary } from '../src/lib/progress.js'
 
 describe('accuracy calculation', () => {
   it('computes rounded percentages', () => {
@@ -48,5 +48,48 @@ describe('criterion streaks', () => {
     expect(st.streak).toBe(2)
     expect(st.met).toBe(false)
     expect(st.nearing).toBe(true) // 2 of 3 ≥ ceil(3/2)
+  })
+
+  it('requires the target cue level as well as target accuracy', () => {
+    const goal = {
+      id: 'g1',
+      targetCriterion: { accuracyPct: 80, consecutiveSessions: 3, cueLevel: 'minimal' }
+    }
+    const mkSession = (date, cueLevel) => ({
+      id: `s${date}`,
+      date,
+      createdAt: 1,
+      goalData: [{ goalId: 'g1', trials: { correct: 9, total: 10 }, cueLevel }]
+    })
+    const sessions = [
+      mkSession('2026-01-01', 'moderate'),
+      mkSession('2026-01-02', 'moderate'),
+      mkSession('2026-01-03', 'minimal'),
+      mkSession('2026-01-04', 'independent')
+    ]
+    const st = goalCriterionStatus(goal, sessions)
+    expect(st.streak).toBe(2)
+    expect(st.met).toBe(false)
+    expect(st.nearing).toBe(true)
+  })
+
+  it('describes an independent latest point without calling it a cue', () => {
+    const goal = {
+      id: 'g1',
+      text: 'Will produce complete sentences.',
+      shortLabel: 'complete sentences',
+      targetCriterion: { accuracyPct: 80, consecutiveSessions: 1, cueLevel: 'independent' }
+    }
+    const sessions = [
+      {
+        id: 's1',
+        date: '2026-01-01',
+        goalData: [
+          { goalId: 'g1', trials: { correct: 9, total: 10 }, cueLevel: 'independent' }
+        ]
+      }
+    ]
+    expect(progressSummary(goal, sessions)).toContain('most recently 90% independently.')
+    expect(progressSummary(goal, sessions)).not.toContain('independent cues')
   })
 })

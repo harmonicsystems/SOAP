@@ -1,6 +1,7 @@
 <script>
   import { sessions, clients, appSettings } from '../lib/repo.js'
   import { assembleNote } from '../lib/note.js'
+  import SampleTag from './SampleTag.svelte'
 
   let { id } = $props()
 
@@ -32,12 +33,16 @@
 {:else}
   <div class="toolbar no-print">
     <a href="#/session/{session.id}">← Back to session</a>
+    {#if session.sample}<SampleTag />{/if}
     <span class="tag {session.status === 'final' ? 'good' : 'quiet'}">{session.status}</span>
     <div class="right toolbar" style="margin-bottom:0">
       <button class="btn-primary" onclick={copy}>{copied ? 'Copied ✓' : 'Copy note'}</button>
       <button onclick={() => window.print()}>Print</button>
     </div>
   </div>
+  {#if session.sample}
+    <p class="print-only sample-print-banner">SAMPLE — FICTIONAL DATA</p>
+  {/if}
   <pre class="note-text">{text}</pre>
   {#if $appSettings.therapistName}
     <p class="print-only">Clinician: {$appSettings.therapistName}</p>

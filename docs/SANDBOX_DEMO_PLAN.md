@@ -1,13 +1,15 @@
 # Sandbox demo — implementation plan
 
-- Status: proposed
+- Status: implemented and technically verified on `codex/sandbox-demo`; human SLP content review
+  pending before merge
 - Feature ID: `F-006`
 - Working name in the UI: **Sample caseload**
 - Primary audience: school-based SLPs evaluating SOAP Note Builder
 - Initial concept: David Nyman
 - Planning contributions: David Nyman + Codex
-- Implementation owner: unassigned
-- Independent reviewer: unassigned
+- Implementation owner: Codex
+- Independent reviewers: Codex adversarial security, clinical-data, and UI/accessibility agents;
+  human/Claude review still welcome before merge
 
 ## 1. Summary
 
@@ -635,7 +637,7 @@ At the smallest supported viewport and with CPU throttling if available:
 
 ## 14. Implementation phases
 
-### Phase 0 — content approval
+### Phase 0 — content approval (human review pending)
 
 Owner: product/SLP reviewer.
 
@@ -644,7 +646,10 @@ Owner: product/SLP reviewer.
 - Approve the session arcs, activities, observations, A/P language, and progress-summary outcome.
 - Confirm that no content implies diagnosis, prognosis, or normative expectations.
 
-Exit criterion: the scenario table is approved before production code is written.
+Exit criterion: the scenario table is approved before merging the implementation to production.
+
+The exploratory branch proceeded with the recommended decisions below so the product can be
+reviewed in working form. This does not substitute for review by a practicing SLP.
 
 ### Phase 1 — pure dataset and tests
 
@@ -749,7 +754,7 @@ Recommended commit-message trailers when applicable:
 ```text
 Suggested-by: Codex
 Specified-with: Codex
-Implemented-with: Claude Code
+Implemented-with: Codex
 Reviewed-by-tool: Codex
 ```
 
@@ -759,32 +764,34 @@ Use only trailers that accurately describe that commit. Human Git authorship rem
 
 | Date | Decision | Decided by | Rationale |
 |---|---|---|---|
-| 2026-07-12 | Use sample records in the real encrypted vault, not a parallel demo mode | David + Codex planning conversation; final approval pending | Exercises the actual product with minimal parallel architecture |
-| 2026-07-12 | Use deterministic authored scenarios rather than randomized data | David + Codex planning conversation; final approval pending | Keeps clinical narratives coherent and tests reproducible |
-| 2026-07-12 | Do not modify the user's corpus/settings | David + Codex planning conversation; final approval pending | Removal must leave the clinician's personalization untouched |
+| 2026-07-12 | Use sample records in the real encrypted vault, not a parallel demo mode | David + Codex | Exercises the actual product with minimal parallel architecture |
+| 2026-07-12 | Use deterministic authored scenarios rather than randomized data | David + Codex | Keeps clinical narratives coherent and tests reproducible |
+| 2026-07-12 | Do not modify the user's corpus/settings | David + Codex | Removal must leave the clinician's personalization untouched |
+| 2026-07-14 | Use social-pragmatic language for T9 | Codex implementation; human content review pending | Shows performance varying by context rather than another smooth accuracy arc |
+| 2026-07-14 | Add a print-only fictional-data banner, while leaving copied note text unchanged | Codex implementation | Protects screenshots/printouts without contaminating EMR-pasteable output |
+| 2026-07-14 | Offer install/reset from Settings as well as discovery on an empty Caseload | Codex implementation | Supports coexistence with personal records and easy repeat evaluation |
+| 2026-07-14 | Derive Install, Repair, or Reset from exact dataset completeness | Codex implementation | Makes the destructive action accurately describe current state |
+| 2026-07-14 | Inherit provenance for sample descendants and reject mixed sample/personal groups | Codex implementation | Ensures removal cannot strand sample-linked records or partial groups |
+| 2026-07-14 | Reset to the canonical dataset and keep the guidance card visible | Codex implementation | Keeps recovery deterministic and avoids another persisted preference |
 
 ### Handoff log
 
 | Date | Agent/person | Role | Phase | Commit(s) | Notes |
 |---|---|---|---|---|---|
-| 2026-07-12 | Codex | planning | 0–5 | uncommitted plan | Created initial agent-neutral implementation plan from discussion with David |
+| 2026-07-12 | Codex | planning | 0–5 | `9e9cb76` | Created and committed the agent-neutral implementation plan from discussion with David |
+| 2026-07-14 | Codex | implementation | 1–5 | `codex/sandbox-demo` | Built the dataset, encrypted lifecycle, guided UI, labels, Help copy, 18 new tests, production browser QA, and adversarial review fixes; final bundle 101.4 KB gzipped, no runtime dependency added |
 
-## 17. Open decisions before implementation
+## 17. Implementation decisions (resolved; human content review remains)
 
-These should be resolved in Phase 0:
+The exploratory implementation resolved the original questions as follows:
 
-1. Should T9 demonstrate social/pragmatic language or fluency?
-2. Should sample note printouts include a print-only `SAMPLE — FICTIONAL DATA` banner?
-3. Is sample installation offered only when the caseload is empty, or also from Settings when real
-   clients exist? Recommendation: both, with the strongest prompt only on an empty caseload.
-4. When any sample data exists, should the action say Reset or Repair based on completeness?
-   Recommendation: calculate completeness and use the accurate label.
-5. Should new goals and sessions created under a sample client inherit sample provenance?
-   Recommendation: yes, so removal cannot leave orphans.
-6. Does resetting sample data need to preserve a tester-created sample goal/session?
-   Recommendation: no; reset restores the canonical dataset after explicit confirmation.
-7. Should the guidance card always remain while sample data exists? Recommendation: yes for the
-   first lean release; persistent dismissal would require an unnecessary setting.
+1. T9 demonstrates social/pragmatic language.
+2. Sample note printouts include a print-only `SAMPLE — FICTIONAL DATA` banner.
+3. Installation is available from empty Caseload and from Settings alongside personal records.
+4. The action says Install, Repair, or Reset based on exact canonical completeness.
+5. New goals and sessions under a sample client inherit sample provenance.
+6. Reset removes tester-created sample descendants and restores the canonical dataset.
+7. The guidance card remains while sample data exists; it has no persisted dismissal state.
 
 ## 18. Definition of done
 

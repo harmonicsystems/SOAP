@@ -6,6 +6,7 @@
   import { todayISO } from '../lib/text.js'
   import { toast } from '../lib/toast.js'
   import Chart from './Chart.svelte'
+  import SampleTag from './SampleTag.svelte'
 
   let { id } = $props()
 
@@ -55,6 +56,7 @@
 
   <div class="toolbar">
     <h1 style="margin:0">Progress — {client.code}</h1>
+    {#if client.sample}<SampleTag />{/if}
     <button class="btn-primary right" onclick={copySummary}>Copy progress summary</button>
   </div>
 

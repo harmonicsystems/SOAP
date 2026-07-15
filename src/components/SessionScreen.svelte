@@ -24,6 +24,7 @@
   import { toast } from '../lib/toast.js'
   import GoalCard from './GoalCard.svelte'
   import PhraseSection from './PhraseSection.svelte'
+  import SampleTag from './SampleTag.svelte'
 
   // `embedded` = rendered inside the group-session screen (which owns the
   // back navigation and client switcher), so drop the standalone back link.
@@ -298,6 +299,7 @@
     {:else}
       <a href="#/client/{client.id}">← {client.code}</a>
     {/if}
+    {#if working.sample}<SampleTag />{/if}
     <span class="muted" aria-live="polite">{saveState === 'saved' ? 'Saved' : 'Saving…'}</span>
     <div class="right toolbar" style="margin-bottom:0">
       {#if isFinal}

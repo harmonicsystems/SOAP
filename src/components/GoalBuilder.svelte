@@ -3,8 +3,9 @@
   import { DOMAINS, CUE_LEVELS } from '../lib/constants.js'
   import { getTemplates } from '../lib/goalTemplates.js'
   import { extractSlots, fillTemplate, slotLabel, slotInputType, CRITERION_SLOTS } from '../lib/templates.js'
+  import { sampleProvenance } from '../lib/sampleData.js'
 
-  let { clientId, goal = null, onclose } = $props()
+  let { clientId, goal = null, sampleSource = null, onclose } = $props()
 
   let domain = $state(goal?.domain ?? 'articulation-phonology')
   let mode = $state(goal ? 'free' : 'template')
@@ -62,7 +63,8 @@
       },
       baseline: baseline.trim(),
       status: goal?.status ?? 'active',
-      createdAt: goal?.createdAt ?? Date.now()
+      createdAt: goal?.createdAt ?? Date.now(),
+      ...sampleProvenance(goal ?? sampleSource)
     })
     onclose()
   }

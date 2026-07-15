@@ -46,9 +46,9 @@ hand-rolled SVG charts · `vite-plugin-pwa` (Workbox) · Vitest. Node 20.17 here
 - `db.js` — Dexie `soap-note-builder`. Data tables store **only `{id, updatedAt, blob}`** where
   `blob` is ciphertext; all queryable fields live *inside* the encrypted payload. `meta` table
   holds vault params (salt, iterations, verification, epoch) + backup/modified timestamps.
-- `repo.js` (largest, ~450 lines) — the encrypted repository + in-memory Svelte stores. Owns the
+- `repo.js` — the encrypted repository + in-memory Svelte stores. Owns the
   key (module-var, wiped on lock), the store cache, lock/unlock, CRUD, settings, passphrase change,
-  backup import, and the corpus mutators. See invariants below.
+  backup import, sample-dataset lifecycle, and the corpus mutators. See invariants below.
 - `backup.js` — `SOAPBKP1` file format (magic + salt-len + salt + 4-byte LE iterations + IV +
   ciphertext; self-contained, restore needs only the passphrase). `mergeRecords` (by id, newer
   wins), `mergeCorpusSettings` (merge-mode import), `saveBackupFile` (File System Access API +
@@ -67,7 +67,8 @@ hand-rolled SVG charts · `vite-plugin-pwa` (Workbox) · Vitest. Node 20.17 here
   X% to Y%", "approaching criterion", "fade cues toward…"). These are *not* learnable/ranked.
 - `similarity.js` — token-set Jaccard + `isNearDuplicate` (≥5 tokens, ≥0.75) for the anti-repetition nudge.
 - `goalTemplates.js` / `templates.js` — goal-template bank (≥8 per priority domain) + slot engine.
-- `progress.js` — accuracy math, criterion streaks, `progressSummary` (IEP paragraph per goal).
+- `progress.js` — accuracy math, accuracy-plus-cue criterion streaks, `progressSummary` (IEP
+  paragraph per goal).
 - `constants.js` — enums, `DOMAINS`, `OBSERVATION_TAGS` (`{id, chip, clause}`), `resolveObsTag`
   (includes archived + custom), `visibleObsTags`, `nextCueLevel`.
 - `text.js` (`appendPhrase`, `fmtDate`, `todayISO`, `daysAgoLabel`), `toast.js` (transient toast +
@@ -76,17 +77,20 @@ hand-rolled SVG charts · `vite-plugin-pwa` (Workbox) · Vitest. Node 20.17 here
 
 - `session.js` — `newSessionRecord(clientId, activeGoals, opts)`: the one builder for both
   individual and group sessions (carries `groupId`). Used by ClientDetail and `repo.createGroup`.
+- `sampleData.js` — deterministic, authored fictional caseload (4 clients, 6 goals, 30 sessions,
+  5 linked groups) built relative to an anchor date. Carries `sample:true` +
+  `sampleDataset:'longitudinal-v1'`; O text always flows through production `generateO()`.
 
 **Components** — `App.svelte` (shell + routing + auto-lock), `LockScreen`, `Header`, `Caseload`
 (+ group creation), `ClientDetail`, `GoalBuilder`, `SessionScreen` (core live screen; `embedded`
 prop for group use), `GoalCard`, `PhraseSection`, `NoteOutput`, `Progress`, `Chart`/`Sparkline`
 (SVG), `Settings`, `Help`, `GroupSession` (client-switcher wrapper reusing SessionScreen),
-`BackupBanner`, `Toast`.
+`BackupBanner`, `SampleTag`, `Toast`.
 
 ## Data model (inside encrypted payloads)
 
 ```
-Client:  { id, code, notes?, archived, createdAt }
+Client:  { id, code, notes?, archived, createdAt, sample?, sampleDataset? }
 Goal:    { id, clientId, domain, text, shortLabel?,
            targetCriterion {accuracyPct, consecutiveSessions, cueLevel},
            baseline?, status: active|met|discontinued, createdAt }
@@ -117,10 +121,13 @@ Setting: { id:'settings', autoLockMinutes, therapistName?,
 - **Key/passphrase are never persisted** and are wiped on lock (`hardLock` also clears the debounced
   usage timer). `lockNow` first awaits registered `onBeforeLock` hooks (SessionScreen's pending
   autosave flush) so a lock mid-typing never drops data.
-- **Cross-tab safety via vault epoch.** Every write (`putRecord`, `persistSettings`) re-reads
-  `db.meta` vault and `hardLock`s if `epoch !== sessionEpoch`. Rekey/erase ops (`changePassphrase`,
-  `importData`, `eraseAllData`) mint a new epoch and post to the `soap-vault` BroadcastChannel;
-  other tabs hard-lock. This prevents a stale-key tab from corrupting the vault.
+- **Cross-tab safety via vault epoch.** Record puts/deletes and settings saves capture the epoch
+  before asynchronous work, then check it and mutate inside one Dexie transaction (WebCrypto still
+  happens before it). External mismatch hard-locks; an operation superseded by a same-tab epoch
+  rotation is dropped. Rekey, import, erase, and sample reset/removal mint an epoch and post to the
+  `soap-vault` BroadcastChannel; other tabs hard-lock. Sample lifecycle rotates once before
+  reloading its destructive-operation snapshot, preventing stale tabs from resurrecting removed
+  records.
 - **Corpus state is section-scoped.** `phraseUsage` and `phraseDomains` key on `phraseKey(section,
   text)` (whitespace-collapsed, lowercased). `rankedBank` falls back to legacy plain-text keys for
   pre-round-3 data. Identical text in two sections must never share/clobber state.
@@ -168,6 +175,23 @@ autosave via `onDestroy`. Every per-client path (notes, progress, caseload, back
 because the underlying records are ordinary sessions. Ranking/nudge naturally exclude other group
 members (they filter by `clientId`).
 
+## Fictional longitudinal sample caseload
+
+An unlocked user can explicitly install the `longitudinal-v1` sample from empty Caseload or
+Settings. It uses ordinary encrypted records so notes, progress, group switching, backup, lock,
+copy, and print exercise the real app. The four authored arcs demonstrate noisy improvement,
+accuracy versus cue dependence, different goal trajectories, and contextual variability. All
+sample screens carry visible `sample` text; printed sample notes add a banner outside the copied
+note string.
+
+Installation/reset and removal are atomic, epoch-changing repository operations. Before any
+replacement, installation rejects case-insensitive collisions with normal client codes and raw or
+decrypted occupants of reserved canonical IDs. New goals/sessions under a sample client inherit
+the marker; sample and personal clients cannot be mixed in a new group. Removal matches the exact
+dataset marker and leaves normal records/settings/corpus untouched. `sampleData.test.js` locks the
+fixture's determinism, references, clinical arcs, trial validity, generated O text, and criterion
+outcomes; repository tests lock encryption, collision, epoch, repair/reset, and removal behavior.
+
 ## Security & lock model
 
 App opens locked. Auto-lock after N idle minutes (configurable) or >5 min tab-hidden (a timer fires
@@ -184,7 +208,7 @@ vault); if the app locks *while on Help*, an effect routes to the lock screen.
 ```
 npm install
 npm run dev        # dev server (hot reload, no service worker)
-npm test           # vitest — 71 tests across lib (crypto, backup, corpus, note, router, session, …)
+npm test           # vitest — 89 tests across lib (crypto, backup, corpus, sample, repo, note, …)
 npm run build      # vite build + gzip bundle-size gate (fails > 120 KB)
 npm run preview    # serve the production build (has the service worker)
 npm run icons      # regenerate public/icon-*.png (zero-dep PNG encoder; only if the mark changes)

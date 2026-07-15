@@ -7,6 +7,7 @@
   import { sessions, clients } from '../lib/repo.js'
   import { fmtDate } from '../lib/text.js'
   import SessionScreen from './SessionScreen.svelte'
+  import SampleTag from './SampleTag.svelte'
 
   let { groupId } = $props()
 
@@ -33,6 +34,7 @@
     <h1 style="margin:0; font-size:1.2rem">
       Group session · {fmtDate(date)} · {members.length} students
     </h1>
+    {#if members.every((member) => member.session.sample)}<SampleTag />{/if}
   </div>
 
   <div class="seg" role="tablist" aria-label="Students in this group" style="margin-bottom:1rem; flex-wrap:wrap">

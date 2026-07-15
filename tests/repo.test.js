@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { get } from 'svelte/store'
 import { db } from '../src/lib/db.js'
 import * as repo from '../src/lib/repo.js'
+import { isSampleRecord, sampleDatasetState } from '../src/lib/sampleData.js'
+import { encryptJSON } from '../src/lib/crypto.js'
 
 // Uses production iteration counts (a few derivations ≈ 1-2s in node) —
 // acceptable for integration tests of the full encrypted-repository path.
@@ -151,5 +153,188 @@ describe('encrypted repository', () => {
     expect(members.find((s) => s.clientId === 'c3').goalData).toEqual([])
     // each member is an independent, individually-openable session record
     expect(new Set(members.map((s) => s.id)).size).toBe(3)
+
+    // Sample-only groups inherit provenance; mixed sample/personal groups are
+    // rejected so removing the sample cannot strand a personal group member.
+    for (const id of ['c1', 'c2']) {
+      const client = get(repo.clients).find((record) => record.id === id)
+      await repo.putRecord('clients', {
+        ...client,
+        sample: true,
+        sampleDataset: 'longitudinal-v1'
+      })
+    }
+    const sampleGroup = await repo.createGroup(['c1', 'c2'], { date: '2026-07-12' })
+    expect(sampleGroup).toBeTruthy()
+    expect(
+      get(repo.sessions)
+        .filter((session) => session.groupId === sampleGroup)
+        .every((session) => session.sample === true)
+    ).toBe(true)
+    expect(await repo.createGroup(['c1', 'c3'], { date: '2026-07-12' })).toBeNull()
+  }, 30000)
+
+  it('installs, repairs, reloads, and removes only the encrypted sample caseload', async () => {
+    await repo.createVault('sample dataset test passphrase')
+    await repo.putRecord('clients', {
+      id: 'real-client',
+      code: 'REAL',
+      notes: 'keep this record',
+      archived: false,
+      createdAt: 1
+    })
+    await repo.savePhrase('S', 'arrived with a favorite book', ['expressive-language'])
+    const settingsBefore = structuredClone(get(repo.appSettings))
+
+    await repo.putRecord('clients', {
+      id: 'collision-client',
+      code: 'k7',
+      archived: false,
+      createdAt: 1
+    })
+    await expect(repo.installSampleDataset('2026-07-14')).rejects.toMatchObject({
+      message: 'sample-code-conflict',
+      conflicts: ['k7']
+    })
+    expect(get(repo.clients).filter(isSampleRecord)).toEqual([])
+    await repo.deleteRecord('clients', 'collision-client')
+
+    const idCollisions = [
+      ['clients', 'sample-longitudinal-v1-client-m14', { code: 'Z1', archived: false }],
+      ['goals', 'sample-longitudinal-v1-goal-m14-r', { clientId: 'real-client', text: 'keep' }],
+      ['sessions', 'sample-longitudinal-v1-session-m14-01', { clientId: 'real-client', date: '2026-01-01' }]
+    ]
+    for (const [table, id, fields] of idCollisions) {
+      await repo.putRecord(table, { id, createdAt: 1, ...fields })
+      await expect(repo.installSampleDataset('2026-07-14')).rejects.toMatchObject({
+        message: 'sample-id-conflict',
+        table,
+        recordId: id
+      })
+      await repo.deleteRecord(table, id)
+    }
+    const reservedId = 'sample-longitudinal-v1-client-m14'
+    await db.clients.put({
+      id: reservedId,
+      updatedAt: 1,
+      blob: crypto.getRandomValues(new Uint8Array(64))
+    })
+    await expect(repo.installSampleDataset('2026-07-14')).rejects.toMatchObject({
+      message: 'sample-id-conflict',
+      table: 'clients',
+      recordId: reservedId
+    })
+    await db.clients.delete(reservedId)
+
+    const epochBeforeInstall = (await db.meta.get('vault')).epoch
+    expect(await repo.installSampleDataset('2026-07-14')).toBe(true)
+    expect((await db.meta.get('vault')).epoch).not.toBe(epochBeforeInstall)
+    expect(
+      sampleDatasetState({
+        clients: get(repo.clients),
+        goals: get(repo.goals),
+        sessions: get(repo.sessions)
+      })
+    ).toBe('complete')
+    expect(get(repo.clients).filter(isSampleRecord)).toHaveLength(4)
+    expect(get(repo.goals).filter(isSampleRecord)).toHaveLength(6)
+    expect(get(repo.sessions).filter(isSampleRecord)).toHaveLength(30)
+    expect(get(repo.appSettings)).toEqual(settingsBefore)
+
+    const sampleRow = await db.clients.get('sample-longitudinal-v1-client-m14')
+    expect(Object.keys(sampleRow).sort()).toEqual(['blob', 'id', 'updatedAt'])
+    expect(new TextDecoder().decode(sampleRow.blob)).not.toContain('M14')
+
+    // A missing canonical record is repaired without duplicates, and an
+    // evaluator-created sample descendant is reset with the sample.
+    const missing = get(repo.sessions).find(isSampleRecord)
+    await repo.deleteRecord('sessions', missing.id)
+    await repo.putRecord('goals', {
+      id: 'extra-sample-goal',
+      clientId: 'sample-longitudinal-v1-client-m14',
+      domain: 'other',
+      text: 'temporary sample edit',
+      status: 'active',
+      createdAt: 2,
+      sample: true,
+      sampleDataset: 'longitudinal-v1'
+    })
+    expect(await repo.installSampleDataset('2026-07-14')).toBe(true)
+    expect(get(repo.sessions).filter(isSampleRecord)).toHaveLength(30)
+    expect(get(repo.goals).some((goal) => goal.id === 'extra-sample-goal')).toBe(false)
+
+    await repo.lockNow()
+    expect(await repo.unlock('sample dataset test passphrase')).toBe(true)
+    expect(get(repo.clients).filter(isSampleRecord)).toHaveLength(4)
+
+    // Simulate a sample descendant committed by another tab before the
+    // removal epoch rotates. It is absent from this tab's cache, so removal
+    // must reload the quiesced vault before selecting ids.
+    const hiddenSample = {
+      id: 'sample-descendant-from-another-tab',
+      clientId: 'sample-longitudinal-v1-client-m14',
+      date: '2026-07-14',
+      sample: true,
+      sampleDataset: 'longitudinal-v1',
+      updatedAt: 2
+    }
+    await db.sessions.put({
+      id: hiddenSample.id,
+      updatedAt: hiddenSample.updatedAt,
+      blob: await encryptJSON(repo.currentKey(), hiddenSample)
+    })
+    expect(get(repo.sessions).some((session) => session.id === hiddenSample.id)).toBe(false)
+
+    const epochBeforeRemove = (await db.meta.get('vault')).epoch
+    expect(await repo.removeSampleDataset()).toBe(true)
+    expect((await db.meta.get('vault')).epoch).not.toBe(epochBeforeRemove)
+    expect(get(repo.clients).filter(isSampleRecord)).toEqual([])
+    expect(get(repo.goals).filter(isSampleRecord)).toEqual([])
+    expect(get(repo.sessions).filter(isSampleRecord)).toEqual([])
+    expect(await db.sessions.get(hiddenSample.id)).toBeUndefined()
+    expect(get(repo.clients)).toContainEqual(expect.objectContaining({ id: 'real-client', code: 'REAL' }))
+    expect(get(repo.appSettings)).toEqual(settingsBefore)
+  }, 30000)
+
+  it('stops sample installation when the vault epoch is stale', async () => {
+    await repo.createVault('sample stale epoch passphrase')
+    const vault = await db.meta.get('vault')
+    await db.meta.put({ ...vault, epoch: 'changed-in-another-tab' })
+
+    expect(await repo.installSampleDataset('2026-07-14')).toBe(false)
+    expect(get(repo.locked)).toBe(true)
+    expect(await db.clients.count()).toBe(0)
+  }, 30000)
+
+  it('drops record and settings writes that began before an epoch change', async () => {
+    await repo.createVault('in-flight epoch test passphrase')
+    const largeText = 'x'.repeat(1024 * 1024)
+
+    // putRecord captures the epoch before its asynchronous encryption. Change
+    // the live epoch while that encryption is in flight: the row must not land.
+    const pendingRecord = repo.putRecord('clients', {
+      id: 'late-client',
+      code: 'L8',
+      notes: largeText,
+      archived: false,
+      createdAt: 1
+    })
+    const firstVault = await db.meta.get('vault')
+    await db.meta.put({ ...firstVault, epoch: 'record-epoch-changed' })
+    expect(await pendingRecord).toBeNull()
+    expect(await db.clients.get('late-client')).toBeUndefined()
+    expect(get(repo.locked)).toBe(true)
+
+    expect(await repo.unlock('in-flight epoch test passphrase')).toBe(true)
+    const pendingSettings = repo.saveSettings({
+      ...get(repo.appSettings),
+      therapistName: largeText
+    })
+    const secondVault = await db.meta.get('vault')
+    await db.meta.put({ ...secondVault, epoch: 'settings-epoch-changed' })
+    await pendingSettings
+    expect(await db.settings.get('settings')).toBeUndefined()
+    expect(await db.meta.get('lastModified')).toBeUndefined()
+    expect(get(repo.locked)).toBe(true)
   }, 30000)
 })

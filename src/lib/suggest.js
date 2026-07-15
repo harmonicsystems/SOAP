@@ -24,14 +24,18 @@ export function aSuggestions(session, goalMap, sessionList) {
       else if (today === prev) out.push(`${label}: consistent with previous session (${today}%)`)
       else out.push(`${label}: decreased from ${prev}% to ${today}% this session`)
     }
-    if (gd.cueTypes?.length) {
-      out.push(`${label}: emerging skill — benefits from ${gd.cueTypes.join(', ')} cues`)
-    }
     const target = goal.targetCriterion?.accuracyPct
     const required = goal.targetCriterion?.consecutiveSessions ?? 1
+    const targetCue = goal.targetCriterion?.cueLevel
+    let streak = 0
     if (target != null) {
       const upTo = sessionList.filter((s) => s.date <= session.date)
-      const streak = streakFromPoints(goalPoints(gd.goalId, upTo), target)
+      streak = streakFromPoints(goalPoints(gd.goalId, upTo), target, targetCue)
+    }
+    if (gd.cueTypes?.length && (target == null || streak < required)) {
+      out.push(`${label}: emerging skill — benefits from ${gd.cueTypes.join(', ')} cues`)
+    }
+    if (target != null) {
       if (streak >= required) {
         out.push(`${label}: met criterion (${streak} consecutive sessions at or above ${target}%)`)
       } else if (streak >= 1) {

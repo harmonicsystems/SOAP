@@ -6,6 +6,7 @@
 
   const sections = [
     ['quick-start', 'Quick start'],
+    ['sample', 'Sample caseload'],
     ['session', 'Running a session'],
     ['corpus', 'Making notes yours'],
     ['backups', 'Backups & restore'],
@@ -55,6 +56,22 @@
       <li><strong>The O section writes itself</strong> from your trial data — one sentence per goal, editable any time.</li>
       <li><strong>View note</strong> → <em>Copy note</em> to paste into your EMR, or <em>Print</em> to save a PDF.</li>
     </ol>
+  </section>
+
+  <section class="card" id="sample">
+    <h2>Explore with the sample caseload</h2>
+    <p>
+      On an empty Caseload screen, choose <em>Explore sample caseload</em> to add four fictional
+      clients with about two months of sessions. The sample demonstrates changing accuracy and
+      cueing, criterion streaks, group sessions, finished notes, and progress summaries.
+    </p>
+    <p>
+      Sample records use the real app and are encrypted inside your vault. They are always labeled
+      <span class="tag quiet">sample</span>, contain no real student information, and are not
+      clinical recommendations or expected outcomes. You may edit them freely. Reset or remove
+      the complete sample from <em>Settings → Sample caseload</em>; your own records and settings
+      are left unchanged.
+    </p>
   </section>
 
   <section class="card" id="session">
@@ -140,8 +157,8 @@
     <h2>How it was built</h2>
     <p>
       This app was built by <strong>Harmonic Systems</strong> with the help of AI coding tools
-      (Anthropic's Claude) used as a <em>development assistant</em> — to write, review, and test
-      the code during development.
+      (Anthropic's Claude and OpenAI's Codex) used as <em>development assistants</em> — to write,
+      review, and test the code during development.
     </p>
     <p>
       <strong>The finished app contains no AI and no machine learning.</strong> Every goal

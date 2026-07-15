@@ -10,13 +10,66 @@
     markBackupDone,
     importData,
     removeLearnedPhrase,
-    lastBackupAt
+    lastBackupAt,
+    clients,
+    goals,
+    sessions,
+    installSampleDataset,
+    removeSampleDataset
   } from '../lib/repo.js'
   import { packBackup, unpackBackup, saveBackupFile, backupFilename } from '../lib/backup.js'
   import { DEFAULT_BANKS, phraseKey } from '../lib/phrasebanks.js'
   import { OBSERVATION_TAGS, domainLabel } from '../lib/constants.js'
   import { toast } from '../lib/toast.js'
   import { daysAgoLabel } from '../lib/text.js'
+  import { todayISO } from '../lib/text.js'
+  import { sampleDatasetState } from '../lib/sampleData.js'
+
+  const sampleState = $derived(
+    sampleDatasetState({ clients: $clients, goals: $goals, sessions: $sessions })
+  )
+  let sampleBusy = $state(false)
+
+  async function installSample() {
+    const verb = sampleState === 'absent' ? 'Add' : 'Reset'
+    const warning =
+      sampleState === 'absent'
+        ? 'It can be removed later without changing your own records.'
+        : 'This replaces all changes made to the fictional sample records.'
+    if (!confirm(`${verb} the fictional sample caseload? ${warning}`)) return
+    sampleBusy = true
+    try {
+      const ok = await installSampleDataset(todayISO())
+      toast.show(ok ? 'Sample caseload ready' : 'Could not install sample caseload')
+    } catch (error) {
+      const message =
+        error.message === 'sample-code-conflict'
+          ? `Sample not added: your caseload already uses ${error.conflicts.join(', ')}. Change that code before trying again.`
+          : error.message === 'sample-id-conflict'
+            ? 'Sample not added because an existing record uses a reserved sample ID. Your existing data was not changed.'
+          : 'Sample setup was interrupted. Use Repair sample caseload to try again.'
+      toast.show(message, null, 8000)
+    } finally {
+      sampleBusy = false
+    }
+  }
+
+  async function removeSample() {
+    if (
+      !confirm(
+        'Remove the fictional sample caseload? Any changes made to sample records will also be removed. Your own records and settings will not change.'
+      )
+    ) return
+    sampleBusy = true
+    try {
+      const ok = await removeSampleDataset()
+      toast.show(ok ? 'Sample caseload removed' : 'Could not remove sample caseload')
+    } catch {
+      toast.show('Could not remove the sample caseload. Try again.', null, 8000)
+    } finally {
+      sampleBusy = false
+    }
+  }
 
   // ---- general ----
   let therapistName = $state($appSettings.therapistName ?? '')
@@ -216,6 +269,42 @@
     <input id="set-lock" type="number" min="1" max="120" bind:value={autoLockMinutes} style="width:90px" />
   </div>
   <button class="btn-primary" onclick={saveGeneral}>Save</button>
+</div>
+
+<div class="card">
+  <h2>Sample caseload</h2>
+  <p class="hint">
+    Install a fictional longitudinal caseload to explore notes, progress, and group sessions using
+    the real encrypted app. All sample clients and clinical details are fictional and are not
+    clinical recommendations or expected outcomes.
+  </p>
+  {#if sampleState === 'absent'}
+    <button onclick={installSample} disabled={sampleBusy}>
+      {sampleBusy ? 'Preparing sample…' : 'Explore sample caseload'}
+    </button>
+  {:else}
+    <p class="muted">
+      {sampleState === 'complete'
+        ? 'The sample caseload is installed.'
+        : 'Part of the sample caseload is present. Reset it to restore the complete example.'}
+    </p>
+    <div class="toolbar" style="margin-bottom:0">
+      <button onclick={installSample} disabled={sampleBusy}>
+        {sampleBusy
+          ? 'Preparing sample…'
+          : sampleState === 'partial'
+            ? 'Repair sample caseload'
+            : 'Reset sample caseload'}
+      </button>
+      <button class="btn-quiet" onclick={removeSample} disabled={sampleBusy}>
+        Remove sample caseload
+      </button>
+    </div>
+    <p class="hint" style="margin-bottom:0">
+      Reset and removal also discard any changes you made to sample records. Your own records,
+      phrases, tags, and settings are not changed.
+    </p>
+  {/if}
 </div>
 
 <div class="card">

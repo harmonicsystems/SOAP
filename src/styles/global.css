@@ -591,6 +591,11 @@ button.undo {
   display: none;
 }
 
+.sample-guide {
+  border-left: 3px solid var(--accent);
+  background: var(--accent-soft);
+}
+
 /* Help page: in-page jump-link nav (hidden in print). */
 .help-toc {
   display: flex;
@@ -641,6 +646,11 @@ button.undo {
     display: block;
     margin-top: 2rem;
     font-size: 11pt;
+  }
+
+  .sample-print-banner {
+    margin: 0 0 1rem;
+    font-weight: 700;
   }
 }
 
