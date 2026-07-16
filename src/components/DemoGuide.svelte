@@ -18,7 +18,7 @@
     {
       eyebrow: 'Step 1 of 6 · Caseload',
       title: 'See a trimester at a glance',
-      copy: 'These 25 fictional student codes cover January through early April. Search the list or scan active goals and recent service dates; Explore freely keeps a return path to this step.'
+      copy: 'These 25 fictional student codes cover January through early April. Filter by the grade and room tags, group the list by tag, domain, or service day, or sort by who you have not seen lately. Explore freely keeps a return path to this step.'
     },
     {
       eyebrow: 'Step 2 of 6 · Student record',

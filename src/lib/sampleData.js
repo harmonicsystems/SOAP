@@ -130,6 +130,52 @@ const GROUP_WEEKS = {
 }
 const GROUP_DAY = { A: 0, B: 1, C: 2, D: 3, E: 4, F: 1, G: 3 }
 const INDIVIDUAL_DAY = { AV: 2, XAN: 3, ZEP: 4 }
+
+// Fictional caseload tags (round 5): a grade spread plus two classroom labels,
+// so the demo shows filtering/grouping without implying real rooms or people.
+export const DEMO_CASELOAD_TAGS = Object.freeze(
+  [
+    ['grk', 'Gr K'],
+    ['gr1', 'Gr 1'],
+    ['gr2', 'Gr 2'],
+    ['gr3', 'Gr 3'],
+    ['gr4', 'Gr 4'],
+    ['gr5', 'Gr 5'],
+    ['rm4', 'Rm 4'],
+    ['rm9', 'Rm 9']
+  ].map(([key, label]) => Object.freeze({ id: `${prefix}-ctag-${key}`, label, archived: false }))
+)
+const demoTagId = (key) => `${prefix}-ctag-${key}`
+
+// Grades loosely track therapy groups (peers are near-grade); classrooms cut
+// across groups the way real rosters do.
+const PROFILE_TAGS = {
+  AV: ['gr2', 'rm4'],
+  BEX: ['gr1'],
+  CY: ['gr1', 'rm4'],
+  DOR: ['gr1'],
+  ELM: ['gr2', 'rm4'],
+  FEN: ['gr2'],
+  GRA: ['gr2'],
+  HUX: ['gr2'],
+  IVQ: ['gr3'],
+  JET: ['gr3'],
+  KAL: ['gr3'],
+  LUM: ['gr3'],
+  MEP: ['gr4', 'rm9'],
+  NIX: ['gr4', 'rm9'],
+  ORQ: ['grk'],
+  PAV: ['gr1'],
+  QET: ['grk'],
+  RUS: ['gr5'],
+  SIV: ['gr5'],
+  TOL: ['gr5'],
+  UMB: ['gr5'],
+  VEK: ['gr4', 'rm9'],
+  WIR: ['gr5'],
+  XAN: ['gr5'],
+  ZEP: ['grk']
+}
 const GROUP_DURATIONS = { A: [30, 35, 30], B: [30, 30, 35], C: [35, 30, 30], D: [30, 35, 35], E: [30, 35, 30], F: [35, 30, 35], G: [30, 35, 30] }
 const INDIVIDUAL_DURATIONS = { AV: [25, 30, 25], XAN: [30, 25, 30], ZEP: [25, 35, 30] }
 const TOTALS = [16, 18, 20, 15, 17, 19, 16, 20, 18, 17, 20, 22]
@@ -403,6 +449,12 @@ export function buildSampleDataset({ anchorDate } = {}) {
       ? 'Fictional demo record. Seen in a recurring small group; review accuracy together with cue level and task context.'
       : 'Fictional demo record. Seen individually; review accuracy together with cue level and task context.',
     archived: false,
+    tags: (PROFILE_TAGS[profile.code] ?? []).map(demoTagId),
+    // ISO weekday (1=Mon) from the same day-offset constants that place the
+    // session dates, so the schedule view always matches the record history.
+    serviceDays: [
+      (profile.group ? GROUP_DAY[profile.group] : INDIVIDUAL_DAY[profile.code]) + 1
+    ],
     demoOutcome: profile.outcome,
     createdAt: timestamp(term.start, index),
     ...marker()

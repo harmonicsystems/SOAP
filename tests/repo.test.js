@@ -154,6 +154,27 @@ describe('encrypted repository', () => {
 
   }, 30000)
 
+  it('injects fresh demo caseload tags on entry and restores them on reset', async () => {
+    const { DEMO_CASELOAD_TAGS } = await import('../src/lib/sampleData.js')
+    await repo.enterDemo('2026-07-15')
+    expect(get(repo.appSettings).caseloadTags.map((t) => t.id)).toEqual(
+      DEMO_CASELOAD_TAGS.map((t) => t.id)
+    )
+    // Demo settings mutations stay in memory and must not stick across reset
+    // or touch the frozen module definitions.
+    await repo.saveSettings({
+      ...get(repo.appSettings),
+      caseloadTags: get(repo.appSettings).caseloadTags.map((t) => ({ ...t, archived: true }))
+    })
+    expect(get(repo.appSettings).caseloadTags.every((t) => t.archived)).toBe(true)
+    await repo.resetDemo('2026-07-15')
+    expect(get(repo.appSettings).caseloadTags.every((t) => t.archived === false)).toBe(true)
+    expect(get(repo.appSettings).caseloadTags).toHaveLength(DEMO_CASELOAD_TAGS.length)
+    expect(DEMO_CASELOAD_TAGS.every((t) => t.archived === false)).toBe(true)
+    repo.exitDemo()
+    expect(get(repo.appSettings).caseloadTags).toEqual([])
+  })
+
   it('keeps the passphrase-free demo entirely separate from the private vault', async () => {
     await repo.createVault('demo isolation test passphrase')
     await repo.putRecord('clients', {

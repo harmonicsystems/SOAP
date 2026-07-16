@@ -20,7 +20,7 @@ the source of truth for exact output formats.
   plain text assembly — same input always yields same output. (AI was used to *build* the app; it
   is not *in* the app. This distinction is stated on the Help page and must stay true.)
 - **Bundle budget: total JS ≤ 120 KB gzipped**, enforced by `scripts/check-bundle-size.mjs` in
-  every `npm run build` (CI fails over budget). Currently ~106 KB. **No new runtime dependency
+  every `npm run build` (CI fails over budget). Currently ~109 KB. **No new runtime dependency
   without a size justification in a code comment.** Only runtime dep is Dexie.
 - **Plain CSS** with custom properties (`src/styles/global.css`) — no framework. Low-stimulation
   design: muted palette, generous whitespace, big touch targets, works on a weak Acer/Edge laptop.
@@ -78,10 +78,21 @@ hand-rolled SVG charts · `vite-plugin-pwa` (Workbox) · Vitest. Node 20.17 here
 
 - `session.js` — `newSessionRecord(clientId, activeGoals, opts)`: the one builder for both
   individual and group sessions (carries `groupId`). Used by ClientDetail and `repo.createGroup`.
+- `caseload.js` — caseload legibility (round 5): `buildStatsMap` (one pass → per-client
+  activeCount/lastSession/nearing/primaryDomain), `filterClients` (code search + **AND** across
+  selected tags; unknown/archived tag ids are dropped so stale selections never blank the list),
+  `sortClients` ('code' | 'last-seen': never-seen first, then oldest, code tie-break),
+  `groupClients` (partitions an already-sorted list into sections: tag = definition order with
+  multi-membership, domain = primaryDomain single-membership, day = Mon–Fri; catch-all buckets
+  last, empty sections dropped), `resolveCaseloadTag` (includes archived), `visibleCaseloadTags`,
+  `WEEKDAYS`. Caseload tags are `settings.caseloadTags` `{id:'ctag-…', label, archived}` —
+  archived never deleted; definitions travel through merge-import via `mergeCorpusSettings`.
 - `sampleData.js` — compact deterministic generator for the most recently completed January–April
   term: 25 letter-only codes, 35 goals, 268 per-client sessions, 7 recurring groups, and 110 total
   meetings. Carries `sample:true` + `sampleDataset:'winter-trimester-v2'`; O text always flows
-  through production `generateO()`.
+  through production `generateO()`. Exports `DEMO_CASELOAD_TAGS` (grade spread + two room labels);
+  each demo client gets tags plus one `serviceDays` weekday derived from the same day constants
+  that place its session dates.
 
 **Components** — `App.svelte` (mode orchestration + private auto-lock), `Welcome`, `LockScreen`
 (create/unlock), `Workspace`, `Header`, `DemoBanner`, `DemoGuide`, `Caseload` (+ group creation),
@@ -92,7 +103,8 @@ hand-rolled SVG charts · `vite-plugin-pwa` (Workbox) · Vitest. Node 20.17 here
 ## Data model (inside encrypted payloads)
 
 ```
-Client:  { id, code, notes?, archived, createdAt, sample?, sampleDataset? }
+Client:  { id, code, notes?, archived, createdAt, sample?, sampleDataset?,
+           tags?: [caseloadTagId], serviceDays?: [1..5] }   // ISO weekday, Mon–Fri
 Goal:    { id, clientId, domain, text, shortLabel?,
            targetCriterion {accuracyPct, consecutiveSessions, cueLevel},
            baseline?, status: active|met|discontinued, createdAt }
@@ -106,7 +118,8 @@ Setting: { id:'settings', autoLockMinutes, therapistName?,
            learned {S,O,A,P: [...]},                    // phrases saved from typing
            phraseUsage {sectionKey: {count,lastUsedAt}},// ranking signal
            phraseDomains {sectionKey: [domainIds]},     // domain affinity
-           customObsTags [{id,chip,clause,archived}], hiddenObsTags [builtinId] }
+           customObsTags [{id,chip,clause,archived}], hiddenObsTags [builtinId],
+           caseloadTags [{id,label,archived}] }         // client organization labels
 ```
 
 `domain` ∈ receptive-language, expressive-language, articulation-phonology, social-pragmatic
@@ -220,7 +233,7 @@ unlocked private route awaits `onBeforeLock` hooks before wiping and loading fic
 ```
 npm install
 npm run dev        # dev server (hot reload, no service worker)
-npm test           # vitest — 99 tests across lib (crypto, backup, corpus, demo, repo, note, …)
+npm test           # vitest — 117 tests across lib (crypto, backup, corpus, caseload, demo, repo, …)
 npm run build      # vite build + gzip bundle-size gate (fails > 120 KB)
 npm run preview    # serve the production build (has the service worker)
 npm run icons      # regenerate public/icon-*.png (zero-dep PNG encoder; only if the mark changes)

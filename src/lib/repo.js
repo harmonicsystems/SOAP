@@ -18,7 +18,8 @@ import { newSessionRecord } from './session.js'
 import {
   buildSampleDataset,
   sampleProvenance,
-  SAMPLE_DATASET_ID
+  SAMPLE_DATASET_ID,
+  DEMO_CASELOAD_TAGS
 } from './sampleData.js'
 import { todayISO } from './text.js'
 
@@ -101,7 +102,11 @@ export function defaultSettings() {
     // Archived (never deleted) so old sessions keep rendering their clauses.
     customObsTags: [],
     // Built-in observation tag ids the clinician has hidden from goal cards.
-    hiddenObsTags: []
+    hiddenObsTags: [],
+    // Clinician-defined caseload tags: [{id, label, archived}] — neutral labels
+    // (grade, room, site) for filtering/grouping the caseload. Archived, never
+    // deleted, so clients referencing a retired tag keep rendering its badge.
+    caseloadTags: []
   }
 }
 
@@ -279,7 +284,12 @@ export function hardLock() {
 function populateDemo(anchorDate) {
   const data = buildSampleDataset({ anchorDate })
   for (const table of DATA_TABLES) stores[table].set(data[table].map((record) => ({ ...record })))
-  appSettings.set(defaultSettings())
+  // Fresh copies each reset: demo settings mutations must never reach the
+  // module-level tag definitions (or the private defaults).
+  appSettings.set({
+    ...defaultSettings(),
+    caseloadTags: DEMO_CASELOAD_TAGS.map((t) => ({ ...t }))
+  })
   lastBackupAt.set(null)
   lastModifiedAt.set(null)
   loadWarnings.set(0)

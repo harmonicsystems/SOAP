@@ -98,4 +98,25 @@ describe('backup', () => {
     expect(merged.phraseUsage['S:imported phrase'].count).toBe(1)
     expect(merged.phraseDomains['S:local phrase'].sort()).toEqual(['fluency', 'voice'])
   })
+
+  it('merge-mode settings: caseload tag definitions travel with the records that use them', () => {
+    const local = {
+      caseloadTags: [{ id: 'ctag-a', label: 'Gr 3', archived: false }]
+    }
+    const incoming = {
+      caseloadTags: [
+        { id: 'ctag-a', label: 'Grade 3 (renamed elsewhere)', archived: true },
+        { id: 'ctag-b', label: 'Rm 12', archived: false }
+      ]
+    }
+    const merged = mergeCorpusSettings(local, incoming)
+    // additive by id, local definition wins — imported clients tagged ctag-b
+    // must keep their badge
+    expect(merged.caseloadTags).toHaveLength(2)
+    expect(merged.caseloadTags.find((t) => t.id === 'ctag-a').label).toBe('Gr 3')
+    expect(merged.caseloadTags.find((t) => t.id === 'ctag-a').archived).toBe(false)
+    expect(merged.caseloadTags.find((t) => t.id === 'ctag-b').label).toBe('Rm 12')
+    // absent on both sides stays a clean empty list
+    expect(mergeCorpusSettings({}, {}).caseloadTags).toEqual([])
+  })
 })

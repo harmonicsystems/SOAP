@@ -67,6 +67,14 @@ export function mergeCorpusSettings(local, incoming) {
     ...(incoming.customObsTags ?? []).filter((t) => !localTagIds.has(t.id))
   ]
 
+  // caseload tags: same policy — imported clients can reference these ids, so
+  // the definitions must come along or their badges silently disappear
+  const localCaseloadIds = new Set((local.caseloadTags ?? []).map((t) => t.id))
+  merged.caseloadTags = [
+    ...(local.caseloadTags ?? []),
+    ...(incoming.caseloadTags ?? []).filter((t) => !localCaseloadIds.has(t.id))
+  ]
+
   // learned phrases: additive per section, case/whitespace-insensitive
   merged.learned = { ...(local.learned ?? {}) }
   for (const section of ['S', 'O', 'A', 'P']) {

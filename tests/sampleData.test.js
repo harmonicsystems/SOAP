@@ -6,6 +6,7 @@ import {
   SAMPLE_DATASET_ID,
   DEMO_DATASET_SUMMARY,
   DEMO_GUIDE_TARGETS,
+  DEMO_CASELOAD_TAGS,
   winterTerm
 } from '../src/lib/sampleData.js'
 import {
@@ -54,6 +55,34 @@ describe('fictional January–April public-demo dataset', () => {
     expect(new Set(records.map((record) => record.id)).size).toBe(records.length)
     expect(records.every((record) => isSampleRecord(record))).toBe(true)
     expect(records.every((record) => record.sampleDataset === SAMPLE_DATASET_ID)).toBe(true)
+  })
+
+  it('gives every client resolvable caseload tags and a service day matching its session history', () => {
+    const data = buildSampleDataset({ anchorDate })
+    const tagIds = new Set(DEMO_CASELOAD_TAGS.map((t) => t.id))
+    expect(DEMO_CASELOAD_TAGS.every((t) => t.archived === false)).toBe(true)
+    // fictional labels only: a grade spread and two neutral room labels
+    expect(DEMO_CASELOAD_TAGS.map((t) => t.label)).toEqual([
+      'Gr K', 'Gr 1', 'Gr 2', 'Gr 3', 'Gr 4', 'Gr 5', 'Rm 4', 'Rm 9'
+    ])
+    for (const client of data.clients) {
+      expect(client.tags.length).toBeGreaterThanOrEqual(1)
+      expect(client.tags.every((id) => tagIds.has(id))).toBe(true)
+      // exactly one weekly service day, and it matches every session's weekday
+      expect(client.serviceDays).toHaveLength(1)
+      const day = client.serviceDays[0]
+      expect(day).toBeGreaterThanOrEqual(1)
+      expect(day).toBeLessThanOrEqual(5)
+      const sessions = data.sessions.filter((s) => s.clientId === client.id)
+      for (const s of sessions) {
+        const weekday = new Date(`${s.date}T12:00:00Z`).getUTCDay()
+        expect(weekday).toBe(day)
+      }
+    }
+    // every grade tag and both rooms are actually used, so grouping by tag
+    // shows a full spread in the demo
+    const used = new Set(data.clients.flatMap((c) => c.tags))
+    expect([...tagIds].every((id) => used.has(id))).toBe(true)
   })
 
   it('covers the full January–April term with varied 10–12-session schedules', () => {

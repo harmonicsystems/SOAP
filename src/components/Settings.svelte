@@ -194,6 +194,34 @@
     await saveSettings({ ...$appSettings, hiddenObsTags: [...hidden] })
   }
 
+  // ---- caseload tags (round 5) ----
+  let newCaseloadTag = $state('')
+
+  async function addCaseloadTag() {
+    const label = newCaseloadTag.trim()
+    if (!label) return
+    const tags = $appSettings.caseloadTags ?? []
+    if (tags.some((t) => t.label.toLowerCase() === label.toLowerCase())) {
+      toast.show('A caseload tag with that label already exists')
+      return
+    }
+    await saveSettings({
+      ...$appSettings,
+      caseloadTags: [...tags, { id: `ctag-${crypto.randomUUID()}`, label, archived: false }]
+    })
+    newCaseloadTag = ''
+    toast.show('Caseload tag added')
+  }
+
+  async function setCaseloadTagArchived(id, archived) {
+    await saveSettings({
+      ...$appSettings,
+      caseloadTags: ($appSettings.caseloadTags ?? []).map((t) =>
+        t.id === id ? { ...t, archived } : t
+      )
+    })
+  }
+
   // ---- erase ----
   let eraseText = $state('')
 
@@ -406,6 +434,49 @@
       Preview: “JD {newTagClause.trim().replace(/\.+$/, '')}.”
     </p>
   {/if}
+</div>
+
+<div class="card">
+  <h2>Caseload tags</h2>
+  <p class="hint">
+    Labels for organizing the caseload — filter and group students by grade, room, site, or
+    service pattern. Assign them on each student's page. Use neutral labels only (like “Gr 3”,
+    “Rm 12”, or “Push-in”) — never teacher, school, or student names. Tags are archived, never
+    deleted, so students keep their badges.
+  </p>
+  {#if ($appSettings.caseloadTags ?? []).length === 0}
+    <p class="muted">None yet — add one below.</p>
+  {:else}
+    <div class="row-list">
+      {#each $appSettings.caseloadTags ?? [] as t (t.id)}
+        <div class="row-item" style="padding:0.4rem 0.75rem">
+          <span class="tag" style="pointer-events:none">{t.label}</span>
+          <span style="flex:1"></span>
+          {#if t.archived}
+            <span class="tag quiet">archived</span>
+            <button class="btn-quiet" onclick={() => setCaseloadTagArchived(t.id, false)}>Restore</button>
+          {:else}
+            <button class="btn-quiet" onclick={() => setCaseloadTagArchived(t.id, true)}>Archive</button>
+          {/if}
+        </div>
+      {/each}
+    </div>
+  {/if}
+  <div class="field-row" style="margin-top:0.75rem">
+    <div class="field" style="margin-bottom:0">
+      <label for="caseload-tag">New tag label</label>
+      <input
+        id="caseload-tag"
+        bind:value={newCaseloadTag}
+        maxlength="20"
+        placeholder="e.g., Gr 3 or Rm 12"
+        style="width:180px"
+      />
+    </div>
+    <button class="btn-primary" onclick={addCaseloadTag} disabled={!newCaseloadTag.trim()}>
+      Add tag
+    </button>
+  </div>
 </div>
 
 <div class="card" style="border-color: var(--bad)">

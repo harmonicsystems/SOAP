@@ -1,7 +1,9 @@
 <script>
-  import { clients, goals, sessions, putRecord, deleteRecord } from '../lib/repo.js'
+  import { get } from 'svelte/store'
+  import { clients, goals, sessions, appSettings, appMode, putRecord, deleteRecord } from '../lib/repo.js'
   import { navigate, hrefFor } from '../lib/router.js'
   import { DOMAINS, domainLabel } from '../lib/constants.js'
+  import { visibleCaseloadTags, resolveCaseloadTag, WEEKDAYS } from '../lib/caseload.js'
   import { goalCriterionStatus, goalPoints } from '../lib/progress.js'
   import { shortLabelFor } from '../lib/ogen.js'
   import { fmtDate } from '../lib/text.js'
@@ -40,13 +42,62 @@
     await putRecord('goals', { ...goal, status })
   }
 
+  // Client edits are serialized through one queue that re-reads the freshest
+  // record at write time. Chip taps arrive faster than a private-mode
+  // encrypt-and-write round-trip on a slow laptop; without this, the second
+  // tap spreads a pre-write snapshot and silently erases the first (last
+  // writer wins in both the store and the encrypted row).
+  let clientWriteQueue = Promise.resolve()
+  function queueClientUpdate(mutate) {
+    clientWriteQueue = clientWriteQueue
+      .then(async () => {
+        const latest = get(clients).find((c) => c.id === id)
+        if (latest) await putRecord('clients', mutate(latest))
+      })
+      .catch(() => {}) // a failed write must not jam later edits
+    return clientWriteQueue
+  }
+
   async function toggleArchive() {
-    await putRecord('clients', { ...client, archived: !client.archived })
+    await queueClientUpdate((c) => ({ ...c, archived: !c.archived }))
   }
 
   async function saveNotes() {
-    await putRecord('clients', { ...client, notes: notesDraft })
+    const notes = notesDraft
+    await queueClientUpdate((c) => ({ ...c, notes }))
     notesDraft = null
+  }
+
+  // Tag/day chips shown for this client: active definitions, plus any archived
+  // tag still assigned here so it can be seen and removed.
+  const tagChoices = $derived.by(() => {
+    const active = visibleCaseloadTags($appSettings)
+    const activeIds = new Set(active.map((t) => t.id))
+    const assignedArchived = (client?.tags ?? [])
+      .filter((tid) => !activeIds.has(tid))
+      .map((tid) => resolveCaseloadTag(tid, $appSettings.caseloadTags ?? []))
+      .filter(Boolean)
+    return [...active, ...assignedArchived]
+  })
+
+  async function toggleTag(tagId) {
+    await queueClientUpdate((c) => {
+      const current = c.tags ?? []
+      const tags = current.includes(tagId)
+        ? current.filter((t) => t !== tagId)
+        : [...current, tagId]
+      return { ...c, tags }
+    })
+  }
+
+  async function toggleDay(dayId) {
+    await queueClientUpdate((c) => {
+      const current = c.serviceDays ?? []
+      const serviceDays = current.includes(dayId)
+        ? current.filter((d) => d !== dayId)
+        : [...current, dayId].sort((a, b) => a - b)
+      return { ...c, serviceDays }
+    })
   }
 
   async function deleteDraft(session) {
@@ -72,6 +123,54 @@
       <a href={hrefFor(`client/${client.id}/progress`)}><button>Progress</button></a>
       <button onclick={toggleArchive}>{client.archived ? 'Unarchive' : 'Archive'}</button>
     </div>
+  </div>
+
+  <div class="card">
+    <h3>Tags &amp; schedule</h3>
+    {#if tagChoices.length === 0}
+      <p class="muted" style="margin:0 0 0.5rem">
+        No caseload tags yet.
+        {#if $appMode !== 'demo'}
+          <a href={hrefFor('settings')}>Define tags in Settings</a> to group students by grade,
+          room, or site.
+        {/if}
+      </p>
+    {:else}
+      <div class="chips" style="margin-bottom:0.5rem" role="group" aria-label="Caseload tags">
+        {#each tagChoices as t (t.id)}
+          {@const on = (client.tags ?? []).includes(t.id)}
+          <button
+            type="button"
+            class="chip"
+            class:active={on}
+            aria-pressed={on}
+            style={t.archived ? 'opacity:0.55' : ''}
+            onclick={() => toggleTag(t.id)}
+          >
+            {t.label}{#if t.archived}&nbsp;· archived{/if}
+          </button>
+        {/each}
+      </div>
+    {/if}
+    <div class="chips" role="group" aria-label="Service days">
+      {#each WEEKDAYS as d (d.id)}
+        {@const on = (client.serviceDays ?? []).includes(d.id)}
+        <button
+          type="button"
+          class="chip"
+          class:active={on}
+          aria-pressed={on}
+          aria-label="{d.label} service day"
+          onclick={() => toggleDay(d.id)}
+        >
+          {d.short}
+        </button>
+      {/each}
+    </div>
+    <p class="hint" style="margin:0.5rem 0 0">
+      Tap to assign tags and usual service days — they power the caseload filters and the
+      day-by-day view. Neutral labels only; never teacher, school, or student names.
+    </p>
   </div>
 
   <div class="card">

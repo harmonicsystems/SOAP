@@ -1,23 +1,59 @@
+<script module>
+  // View preferences survive in-session navigation (back to a client and
+  // return) but are never persisted — they reset with the page. Only opaque
+  // values live here: the search TEXT is deliberately excluded so a private
+  // code fragment can never resurface in the demo (or vice versa) after a
+  // lock. Stale tag-id selections carried across a demo/private switch are
+  // neutralized inside filterClients, which ignores unknown ids.
+  let savedView = { showArchived: false, sortKey: 'code', groupBy: 'none', tagIds: [] }
+</script>
+
 <script>
   import {
     clients,
     goals,
     sessions,
+    appSettings,
     appMode,
     putRecord,
     createGroup
   } from '../lib/repo.js'
   import { navigate } from '../lib/router.js'
-  import { goalCriterionStatus } from '../lib/progress.js'
+  import {
+    buildStatsMap,
+    filterClients,
+    sortClients,
+    groupClients,
+    visibleCaseloadTags,
+    resolveCaseloadTag
+  } from '../lib/caseload.js'
   import { fmtDate, todayISO } from '../lib/text.js'
   import { MIN_GROUP_SIZE, MAX_GROUP_SIZE } from '../lib/constants.js'
   import { DEMO_DATASET_SUMMARY } from '../lib/sampleData.js'
   import SampleTag from './SampleTag.svelte'
 
   let search = $state('')
-  let showArchived = $state(false)
+  let showArchived = $state(savedView.showArchived)
+  let sortKey = $state(savedView.sortKey)
+  let groupBy = $state(savedView.groupBy)
+  let tagIds = $state(savedView.tagIds)
   let newCode = $state('')
   let addError = $state('')
+
+  $effect(() => {
+    savedView = { showArchived, sortKey, groupBy, tagIds }
+  })
+
+  const GROUP_DIMENSIONS = [
+    ['none', 'None'],
+    ['tag', 'Tag'],
+    ['domain', 'Domain'],
+    ['day', 'Day']
+  ]
+
+  function toggleFilterTag(id) {
+    tagIds = tagIds.includes(id) ? tagIds.filter((t) => t !== id) : [...tagIds, id]
+  }
 
   // ---- group session creation ----
   let groupMode = $state(false)
@@ -60,23 +96,35 @@
     }
   }
 
-  const visible = $derived(
-    $clients
-      .filter((c) => (showArchived ? true : !c.archived))
-      .filter((c) => c.code.toLowerCase().includes(search.trim().toLowerCase()))
-      .sort((a, b) => a.code.localeCompare(b.code))
+  const tagDefs = $derived($appSettings.caseloadTags ?? [])
+  const filterTags = $derived(visibleCaseloadTags($appSettings))
+  // Selection ids that actually constrain the list right now. tagIds can hold
+  // stale ids (tag archived meanwhile, or carried across a mode switch) that
+  // filterClients ignores — those must not make "Clear filters" claim a
+  // filter is active when no chip shows as pressed.
+  const appliedTagIds = $derived(tagIds.filter((id) => filterTags.some((t) => t.id === id)))
+  const statsById = $derived(buildStatsMap($clients, $goals, $sessions))
+  const sections = $derived(
+    groupClients(
+      sortClients(
+        filterClients($clients, { search, tagIds, showArchived, tagDefs }),
+        sortKey,
+        statsById
+      ),
+      groupBy,
+      { statsById, tagDefs }
+    )
+  )
+  const visibleCount = $derived(
+    groupBy === 'none'
+      ? (sections[0]?.clients.length ?? 0)
+      : new Set(sections.flatMap((s) => s.clients.map((c) => c.id))).size
   )
 
-  function stats(client) {
-    const clientGoals = $goals.filter((g) => g.clientId === client.id)
-    const active = clientGoals.filter((g) => g.status === 'active')
-    const clientSessions = $sessions.filter((s) => s.clientId === client.id)
-    const lastSession = clientSessions.map((s) => s.date).sort().at(-1) ?? null
-    const nearing = active.filter((g) => {
-      const st = goalCriterionStatus(g, clientSessions)
-      return st.nearing || st.met
-    }).length
-    return { activeCount: active.length, lastSession, nearing }
+  function rowTags(client) {
+    return (client.tags ?? [])
+      .map((tid) => resolveCaseloadTag(tid, tagDefs))
+      .filter(Boolean)
   }
 
   async function addClient(e) {
@@ -207,33 +255,120 @@
     <input type="checkbox" bind:checked={showArchived} />
     Show archived
   </label>
+  <div class="seg right" role="group" aria-label="Sort caseload">
+    <button
+      type="button"
+      class:active={sortKey === 'code'}
+      aria-pressed={sortKey === 'code'}
+      onclick={() => (sortKey = 'code')}
+    >
+      A–Z
+    </button>
+    <button
+      type="button"
+      class:active={sortKey === 'last-seen'}
+      aria-pressed={sortKey === 'last-seen'}
+      onclick={() => (sortKey = 'last-seen')}
+      title="Students you haven't seen recently first"
+    >
+      Last seen
+    </button>
+  </div>
 </div>
 
-{#if visible.length === 0}
-  <p class="muted">No clients yet. Add your first client above.</p>
-{:else}
-  <div class="row-list" data-guide-target="caseload-list">
-    {#each visible as client (client.id)}
-      {@const s = stats(client)}
-      <div
-        class="row-item clickable"
-        role="button"
-        tabindex="0"
-        onclick={() => navigate(`client/${client.id}`)}
-        onkeydown={(e) => {
-          if (e.key === 'Enter') navigate(`client/${client.id}`)
-        }}
+<div class="toolbar" style="row-gap:0.5rem">
+  <span class="muted" style="font-size:0.85rem">Group by</span>
+  <div class="seg" role="group" aria-label="Group caseload by">
+    {#each GROUP_DIMENSIONS as [key, label] (key)}
+      <button
+        type="button"
+        class:active={groupBy === key}
+        aria-pressed={groupBy === key}
+        onclick={() => (groupBy = key)}
       >
-        <strong style="font-size:1.1rem; min-width:4.5rem">{client.code}</strong>
-        {#if client.sample}<SampleTag />{/if}
-        <span class="tag">{s.activeCount} active goal{s.activeCount === 1 ? '' : 's'}</span>
-        {#if s.nearing > 0}
-          <span class="tag good">{s.nearing} near criterion</span>
-        {/if}
-        <span class="muted right" style="font-size:0.85rem">
-          {s.lastSession ? `Last session ${fmtDate(s.lastSession)}` : 'No sessions yet'}
+        {label}
+      </button>
+    {/each}
+  </div>
+</div>
+
+{#if filterTags.length > 0}
+  <div class="chips" style="margin-bottom:0.75rem" role="group" aria-label="Filter by caseload tag">
+    {#each filterTags as t (t.id)}
+      {@const on = tagIds.includes(t.id)}
+      <button type="button" class="chip" class:active={on} aria-pressed={on} onclick={() => toggleFilterTag(t.id)}>
+        {t.label}
+      </button>
+    {/each}
+    {#if appliedTagIds.length > 0}
+      <button type="button" class="chip" onclick={() => (tagIds = [])}>Clear filters</button>
+    {/if}
+  </div>
+{/if}
+
+{#snippet clientRow(client)}
+  {@const s = statsById.get(client.id)}
+  {@const badges = rowTags(client)}
+  <div
+    class="row-item clickable"
+    role="button"
+    tabindex="0"
+    onclick={() => navigate(`client/${client.id}`)}
+    onkeydown={(e) => {
+      // role="button" must activate on Space as well as Enter; preventDefault
+      // stops Space from scrolling the page instead.
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault()
+        navigate(`client/${client.id}`)
+      }
+    }}
+  >
+    <strong style="font-size:1.1rem; min-width:4.5rem">{client.code}</strong>
+    {#if client.sample}<SampleTag />{/if}
+    <span class="tag">{s.activeCount} active goal{s.activeCount === 1 ? '' : 's'}</span>
+    {#if s.nearing > 0}
+      <span class="tag good">{s.nearing} near criterion</span>
+    {/if}
+    {#each badges.slice(0, 3) as t (t.id)}
+      <span class="tag quiet">{t.label}</span>
+    {/each}
+    {#if badges.length > 3}
+      <span class="tag quiet">+{badges.length - 3}</span>
+    {/if}
+    <span class="muted right" style="font-size:0.85rem">
+      {s.lastSession ? `Last session ${fmtDate(s.lastSession)}` : 'No sessions yet'}
+    </span>
+    {#if client.archived}<span class="tag quiet">archived</span>{/if}
+  </div>
+{/snippet}
+
+{#if visibleCount === 0}
+  <p class="muted">
+    {#if $clients.length === 0}
+      No clients yet. Add your first client above.
+    {:else}
+      No students match the current search or filters.
+    {/if}
+  </p>
+{:else if groupBy === 'none'}
+  <div class="row-list" data-guide-target="caseload-list">
+    {#each sections[0].clients as client (client.id)}
+      {@render clientRow(client)}
+    {/each}
+  </div>
+{:else}
+  <div data-guide-target="caseload-list">
+    {#each sections as section (section.key)}
+      <h3 class="muted" style="margin:1rem 0 0.35rem">
+        {section.label}
+        <span style="font-weight:normal">
+          · {section.clients.length} student{section.clients.length === 1 ? '' : 's'}
         </span>
-        {#if client.archived}<span class="tag quiet">archived</span>{/if}
+      </h3>
+      <div class="row-list">
+        {#each section.clients as client (client.id)}
+          {@render clientRow(client)}
+        {/each}
       </div>
     {/each}
   </div>
