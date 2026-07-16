@@ -8,6 +8,7 @@
   import { fmtDate } from '../lib/text.js'
   import SessionScreen from './SessionScreen.svelte'
   import SampleTag from './SampleTag.svelte'
+  import { hrefFor } from '../lib/router.js'
 
   let { groupId } = $props()
 
@@ -27,20 +28,27 @@
 </script>
 
 {#if members.length === 0}
-  <p class="muted">Group session not found. <a href="#/clients">Back to caseload</a></p>
+  <p class="muted">Group session not found. <a href={hrefFor('clients')}>Back to caseload</a></p>
 {:else}
   <div class="toolbar">
-    <a href="#/clients">← Caseload</a>
+    <a href={hrefFor('clients')}>← Caseload</a>
     <h1 style="margin:0; font-size:1.2rem">
       Group session · {fmtDate(date)} · {members.length} students
     </h1>
     {#if members.every((member) => member.session.sample)}<SampleTag />{/if}
   </div>
 
-  <div class="seg" role="tablist" aria-label="Students in this group" style="margin-bottom:1rem; flex-wrap:wrap">
+  <div
+    class="seg"
+    role="group"
+    aria-label="Students in this group"
+    data-guide-target="group-switcher"
+    style="margin-bottom:1rem; flex-wrap:wrap"
+  >
     {#each members as m (m.session.id)}
       <button
         class:active={m.session.id === active?.session.id}
+        aria-pressed={m.session.id === active?.session.id}
         onclick={() => (activeId = m.session.id)}
       >
         {m.client.code}{#if m.session.status === 'final'} ✓{/if}
@@ -63,7 +71,7 @@
         <div class="row-item" style="padding:0.5rem 0.75rem">
           <strong style="min-width:4rem">{m.client.code}</strong>
           <span class="tag {m.session.status === 'final' ? 'good' : 'quiet'}">{m.session.status}</span>
-          <a class="right" href="#/session/{m.session.id}/note"><button>View note</button></a>
+          <a class="right" href={hrefFor(`session/${m.session.id}/note`)}><button>View note</button></a>
         </div>
       {/each}
     </div>

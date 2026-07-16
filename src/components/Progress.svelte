@@ -7,6 +7,7 @@
   import { toast } from '../lib/toast.js'
   import Chart from './Chart.svelte'
   import SampleTag from './SampleTag.svelte'
+  import { hrefFor } from '../lib/router.js'
 
   let { id } = $props()
 
@@ -48,10 +49,10 @@
 </script>
 
 {#if !client}
-  <p class="muted">Client not found. <a href="#/clients">Back to caseload</a></p>
+  <p class="muted">Client not found. <a href={hrefFor('clients')}>Back to caseload</a></p>
 {:else}
   <div class="toolbar">
-    <a href="#/client/{client.id}">← {client.code}</a>
+    <a href={hrefFor(`client/${client.id}`)}>← {client.code}</a>
   </div>
 
   <div class="toolbar">
@@ -79,10 +80,10 @@
     <p class="muted">No goals yet for this client.</p>
   {/if}
 
-  {#each clientGoals as goal (goal.id)}
+  {#each clientGoals as goal, i (goal.id)}
     {@const points = goalPoints(goal.id, filteredSessions)}
     {@const status = goalCriterionStatus(goal, filteredSessions)}
-    <div class="card">
+    <div class="card" data-guide-target={i === 0 ? 'progress-chart' : undefined}>
       <div class="toolbar" style="margin-bottom:0.25rem">
         <h3 style="margin:0">{shortLabelFor(goal)}</h3>
         <span class="tag quiet">{domainLabel(goal.domain)}</span>

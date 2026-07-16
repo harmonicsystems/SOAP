@@ -61,6 +61,9 @@ export function progressSummary(goal, sessionList) {
   const cue = goal.targetCriterion?.cueLevel
   const label = shortLabelFor(goal)
   const lines = [`Goal (${label}): ${goal.text}`]
+  if (goal.status && goal.status !== 'active') {
+    lines.push(`Status: ${goal.status === 'met' ? 'Met' : 'Discontinued'}.`)
+  }
   if (goal.baseline) lines.push(`Baseline: ${goal.baseline}.`)
   if (!pts.length) {
     lines.push('No trial data collected yet.')

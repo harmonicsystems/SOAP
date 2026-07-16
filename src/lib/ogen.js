@@ -45,7 +45,7 @@ export function goalSentence(clientCode, goal, gd) {
   if (gd.cueLevel === 'independent') {
     cues = 'independently'
   } else {
-    const types = (gd.cueTypes ?? []).join(', ')
+    const types = joinClauses(gd.cueTypes ?? [])
     cues = `given ${gd.cueLevel}${types ? ` ${types}` : ''} cues`
   }
   const during = gd.activity?.trim() ? ` during ${gd.activity.trim()}` : ''

@@ -4,7 +4,9 @@ import {
   isSampleRecord,
   SAMPLE_CLIENT_IDS,
   SAMPLE_DATASET_ID,
-  sampleDatasetState
+  DEMO_DATASET_SUMMARY,
+  DEMO_GUIDE_TARGETS,
+  winterTerm
 } from '../src/lib/sampleData.js'
 import {
   CUE_LEVELS,
@@ -17,46 +19,64 @@ import { generateO } from '../src/lib/ogen.js'
 import { assembleNote } from '../src/lib/note.js'
 import { goalCriterionStatus, goalPoints } from '../src/lib/progress.js'
 
-const anchorDate = '2026-07-14'
+const anchorDate = '2026-07-15'
 
-function withoutCalendar(dataset) {
-  return {
-    clients: dataset.clients.map(({ createdAt, ...record }) => record),
-    goals: dataset.goals.map(({ createdAt, ...record }) => record),
-    sessions: dataset.sessions.map(({ createdAt, date, ...record }) => record)
-  }
+function windowMean(points, side) {
+  const values = (side === 'first' ? points.slice(0, 3) : points.slice(-3)).map((point) => point.pct)
+  return values.reduce((sum, value) => sum + value, 0) / values.length
 }
 
-describe('fictional longitudinal sample dataset', () => {
-  it('is deterministic for an anchor and shifts only calendar fields for another anchor', () => {
+function deltaFor(goal, sessions) {
+  const points = goalPoints(goal.id, sessions)
+  return windowMean(points, 'last') - windowMean(points, 'first')
+}
+
+describe('fictional January–April public-demo dataset', () => {
+  it('is deterministic for an anchor and chooses the most recently completed winter term', () => {
     const first = buildSampleDataset({ anchorDate })
     expect(buildSampleDataset({ anchorDate })).toEqual(first)
-
-    const shifted = buildSampleDataset({ anchorDate: '2026-08-14' })
-    expect(withoutCalendar(shifted)).toEqual(withoutCalendar(first))
-    expect(shifted.sessions.at(-1).date).not.toBe(first.sessions.at(-1).date)
-  })
-
-  it('validates its anchor date', () => {
+    expect(winterTerm(anchorDate)).toEqual({ year: 2026, start: '2026-01-05', end: '2026-04-03' })
+    expect(winterTerm('2026-02-01')).toEqual({ year: 2025, start: '2025-01-06', end: '2025-04-04' })
     expect(() => buildSampleDataset({})).toThrow('anchor date')
-    expect(() => buildSampleDataset({ anchorDate: '07/14/2026' })).toThrow('anchor date')
+    expect(() => buildSampleDataset({ anchorDate: '07/15/2026' })).toThrow('anchor date')
   })
 
-  it('has stable counts, unique IDs, de-identified codes, and complete provenance', () => {
+  it('has the approved lean caseload counts and letter-only codes', () => {
     const data = buildSampleDataset({ anchorDate })
-    expect(data.clients).toHaveLength(4)
-    expect(data.goals).toHaveLength(6)
-    expect(data.sessions).toHaveLength(30)
+    expect(DEMO_DATASET_SUMMARY).toEqual({ clients: 25, goals: 35, sessions: 268, groups: 7, meetings: 110 })
+    expect(data.clients).toHaveLength(25)
+    expect(data.goals).toHaveLength(35)
+    expect(data.sessions).toHaveLength(268)
+    expect(new Set(data.clients.map((client) => client.code)).size).toBe(25)
+    expect(data.clients.every((client) => /^[A-Z]{2,3}$/.test(client.code))).toBe(true)
 
     const records = [...data.clients, ...data.goals, ...data.sessions]
     expect(new Set(records.map((record) => record.id)).size).toBe(records.length)
     expect(records.every((record) => isSampleRecord(record))).toBe(true)
     expect(records.every((record) => record.sampleDataset === SAMPLE_DATASET_ID)).toBe(true)
-    expect(data.clients.every((client) => /^\S{1,5}$/.test(client.code))).toBe(true)
-    expect(data.sessions.every((session) => session.date <= anchorDate)).toBe(true)
   })
 
-  it('uses valid references, enums, and built-in observation tags', () => {
+  it('covers the full January–April term with varied 10–12-session schedules', () => {
+    const data = buildSampleDataset({ anchorDate })
+    const dates = data.sessions.map((session) => session.date).sort()
+    expect(dates[0]).toBe('2026-01-05')
+    expect(dates.at(-1)).toBe('2026-04-03')
+    expect(data.sessions.every((session) => session.date >= '2026-01-05' && session.date <= '2026-04-03')).toBe(true)
+    for (const client of data.clients) {
+      const sessions = data.sessions.filter((session) => session.clientId === client.id)
+      expect(sessions.length).toBeGreaterThanOrEqual(10)
+      expect(sessions.length).toBeLessThanOrEqual(12)
+      expect(sessions.map((session) => session.date)).toEqual(
+        sessions.map((session) => session.date).sort()
+      )
+    }
+    expect(new Set(data.clients.map((client) => data.sessions.filter((session) => session.clientId === client.id).length)).size).toBeGreaterThan(1)
+    expect(new Set(data.sessions.map((session) => session.durationMin)).size).toBeGreaterThan(2)
+    expect(new Set(data.goals.map((goal) => JSON.stringify(goal.targetCriterion))).size).toBeGreaterThan(1)
+    expect(data.sessions.filter((session) => session.status === 'draft')).toHaveLength(3)
+  })
+
+  it('uses valid references, enums, trials, and built-in observations', () => {
     const data = buildSampleDataset({ anchorDate })
     const clients = new Map(data.clients.map((client) => [client.id, client]))
     const goals = new Map(data.goals.map((goal) => [goal.id, goal]))
@@ -66,6 +86,7 @@ describe('fictional longitudinal sample dataset', () => {
       expect(clients.has(goal.clientId)).toBe(true)
       expect(domains.has(goal.domain)).toBe(true)
       expect(CUE_LEVELS).toContain(goal.targetCriterion.cueLevel)
+      expect(['active', 'met', 'discontinued']).toContain(goal.status)
     }
     for (const session of data.sessions) {
       expect(clients.has(session.clientId)).toBe(true)
@@ -75,18 +96,21 @@ describe('fictional longitudinal sample dataset', () => {
         expect(CUE_LEVELS).toContain(gd.cueLevel)
         expect(gd.cueTypes.every((cue) => CUE_TYPES.includes(cue))).toBe(true)
         expect(gd.observations.every((id) => observationTag(id))).toBe(true)
-        if (gd.trials) {
-          expect(Number.isInteger(gd.trials.correct)).toBe(true)
-          expect(Number.isInteger(gd.trials.total)).toBe(true)
-          expect(gd.trials.total).toBeGreaterThan(0)
-          expect(gd.trials.correct).toBeGreaterThanOrEqual(0)
-          expect(gd.trials.correct).toBeLessThanOrEqual(gd.trials.total)
-        }
+        if (gd.observations.includes('model')) expect(gd.cueTypes).toContain('model')
+        expect(Number.isInteger(gd.trials.correct)).toBe(true)
+        expect(Number.isInteger(gd.trials.total)).toBe(true)
+        expect(gd.trials.total).toBeGreaterThanOrEqual(12)
+        expect(gd.trials.total).toBeLessThanOrEqual(30)
+        expect(gd.trials.correct).toBeGreaterThanOrEqual(0)
+        expect(gd.trials.correct).toBeLessThanOrEqual(gd.trials.total)
+      }
+      if (/\bmodel\b/i.test(session.standout)) {
+        expect(session.goalData.some((gd) => gd.cueTypes.includes('model'))).toBe(true)
       }
     }
   })
 
-  it('builds valid linked groups with distinct per-client notes', () => {
+  it('creates 74 valid linked group meetings and 36 individual meetings', () => {
     const data = buildSampleDataset({ anchorDate })
     const groups = new Map()
     for (const session of data.sessions.filter((record) => record.groupId)) {
@@ -94,7 +118,7 @@ describe('fictional longitudinal sample dataset', () => {
       members.push(session)
       groups.set(session.groupId, members)
     }
-    expect(groups.size).toBe(5)
+    expect(groups.size).toBe(74)
     for (const members of groups.values()) {
       expect(members.length).toBeGreaterThanOrEqual(2)
       expect(members.length).toBeLessThanOrEqual(4)
@@ -103,10 +127,11 @@ describe('fictional longitudinal sample dataset', () => {
       expect(members.every((member) => member.setting === 'group')).toBe(true)
       expect(new Set(members.map((member) => member.soap.O)).size).toBe(members.length)
     }
-    expect(data.sessions.filter((session) => !session.groupId).every((s) => s.setting !== 'group')).toBe(true)
+    expect(data.sessions.filter((session) => !session.groupId)).toHaveLength(36)
+    expect(data.sessions.filter((session) => !session.groupId).every((session) => session.setting === 'individual')).toBe(true)
   })
 
-  it('generates every O section through the production generator and assembles clean notes', () => {
+  it('generates every O section through production logic and cleanly assembles every note', () => {
     const data = buildSampleDataset({ anchorDate })
     const clients = new Map(data.clients.map((client) => [client.id, client]))
     for (const session of data.sessions) {
@@ -115,59 +140,145 @@ describe('fictional longitudinal sample dataset', () => {
       expect(session.soap.O).toBe(
         generateO(client.code, goals, session.goalData, session.observations, session.standout)
       )
-      const note = assembleNote(client, session)
-      expect(note).not.toMatch(/\b(?:null|undefined)\b/)
+      expect(assembleNote(client, session)).not.toMatch(/\b(?:null|undefined)\b/)
+      expect(session.soap.O).not.toMatch(
+        /\bproduced (?:answer|enter|explain|follow|identify|maintain|make|request|retell|share|use)\b/i
+      )
     }
   })
 
-  it('shows a noisy M14 trajectory that ultimately meets the /r/ criterion', () => {
+  it('locks the realistic outcome distribution, including plateaus and lower recent performance', () => {
     const data = buildSampleDataset({ anchorDate })
-    const goals = data.goals.filter((goal) => goal.clientId === SAMPLE_CLIENT_IDS.m14)
-    const sessions = data.sessions.filter((session) => session.clientId === SAMPLE_CLIENT_IDS.m14)
-    const rGoal = goals.find((goal) => goal.shortLabel.includes('vocalic'))
-    const points = goalPoints(rGoal.id, sessions)
-    expect(points.some((point, index) => index > 0 && point.pct < points[index - 1].pct)).toBe(true)
-    expect(goalCriterionStatus(rGoal, sessions)).toMatchObject({ streak: 3, met: true })
+    const counts = data.clients.reduce((groups, client) => {
+      groups[client.demoOutcome] = [...(groups[client.demoOutcome] ?? []), client]
+      return groups
+    }, {})
+    expect(Object.fromEntries(Object.entries(counts).map(([key, value]) => [key, value.length]))).toEqual({
+      clear: 5,
+      'cue-dependent': 2,
+      mixed: 4,
+      'lower-recent': 3,
+      modest: 6,
+      plateau: 5
+    })
+
+    for (const client of counts.plateau) {
+      const goal = data.goals.find((record) => record.clientId === client.id)
+      const sessions = data.sessions.filter((session) => session.clientId === client.id)
+      expect(Math.abs(deltaFor(goal, sessions))).toBeLessThanOrEqual(5)
+    }
+    for (const client of counts['lower-recent']) {
+      const goal = data.goals.find((record) => record.clientId === client.id)
+      const sessions = data.sessions.filter((session) => session.clientId === client.id)
+      expect(deltaFor(goal, sessions)).toBeLessThanOrEqual(-5)
+    }
+
+    for (const client of counts.mixed) {
+      const clientGoals = data.goals.filter((goal) => goal.clientId === client.id)
+      const clientSessions = data.sessions.filter((session) => session.clientId === client.id)
+      const deltas = clientGoals.map((goal) => deltaFor(goal, clientSessions))
+      expect(clientGoals).toHaveLength(2)
+      expect(Math.max(...deltas) - Math.min(...deltas)).toBeGreaterThanOrEqual(4)
+    }
   })
 
-  it('keeps P3 below criterion while high accuracy still needs moderate cues', () => {
+  it('keeps accuracy-before-cues stories below their cue-aware criteria', () => {
     const data = buildSampleDataset({ anchorDate })
-    const goal = data.goals.find((record) => record.clientId === SAMPLE_CLIENT_IDS.p3)
-    const sessions = data.sessions.filter((session) => session.clientId === SAMPLE_CLIENT_IDS.p3)
-    const highWithModerate = goalPoints(goal.id, sessions).filter(
-      (point) => point.pct >= 80 && point.cueLevel === 'moderate'
+    for (const code of ['BEX', 'NIX']) {
+      const clientId = SAMPLE_CLIENT_IDS[code.toLowerCase()]
+      const goal = data.goals.find((record) => record.clientId === clientId)
+      const sessions = data.sessions.filter((session) => session.clientId === clientId)
+      const points = goalPoints(goal.id, sessions)
+      expect(windowMean(points, 'last') - windowMean(points, 'first')).toBeGreaterThan(20)
+      expect(points.slice(-3).every((point) => point.cueLevel === 'moderate')).toBe(true)
+      expect(goalCriterionStatus(goal, sessions).met).toBe(false)
+    }
+  })
+
+  it('has only a minority of met goals and preserves discontinued/reframed histories', () => {
+    const data = buildSampleDataset({ anchorDate })
+    expect(data.goals.filter((goal) => goal.status === 'met')).toHaveLength(5)
+    expect(data.goals.filter((goal) => goal.status === 'discontinued')).toHaveLength(2)
+    expect(data.goals.filter((goal) => goal.status === 'active')).toHaveLength(28)
+    const criterionMet = data.goals.filter((goal) => {
+      const sessions = data.sessions.filter((session) => session.clientId === goal.clientId)
+      return goalCriterionStatus(goal, sessions).met
+    })
+    expect(criterionMet).toHaveLength(5)
+  })
+
+  it('matches the approved per-student goal matrix and locks its hero stories', () => {
+    const data = buildSampleDataset({ anchorDate })
+    const goalCounts = Object.fromEntries(
+      data.clients.map((client) => [
+        client.code,
+        data.goals.filter((goal) => goal.clientId === client.id).length
+      ])
     )
-    expect(highWithModerate.length).toBeGreaterThanOrEqual(2)
-    expect(goalCriterionStatus(goal, sessions)).toMatchObject({ streak: 2, met: false, nearing: true })
+    expect(goalCounts).toEqual({
+      AV: 2, BEX: 1, CY: 2, DOR: 1, ELM: 2, FEN: 1, GRA: 2, HUX: 1,
+      IVQ: 2, JET: 1, KAL: 1, LUM: 2, MEP: 1, NIX: 1, ORQ: 2, PAV: 1,
+      QET: 1, RUS: 2, SIV: 1, TOL: 1, UMB: 2, VEK: 1, WIR: 1, XAN: 1, ZEP: 2
+    })
+
+    const clientFor = (code) => data.clients.find((client) => client.code === code)
+    const sessionsFor = (code) => data.sessions.filter((session) => session.clientId === clientFor(code).id)
+    const goalsFor = (code) => data.goals.filter((goal) => goal.clientId === clientFor(code).id)
+
+    const graSessions = sessionsFor('GRA')
+    const graRepair = goalsFor('GRA')[1]
+    const graObs = graSessions.map((session) => session.goalData.find((gd) => gd.goalId === graRepair.id)?.observations ?? [])
+    expect(graObs.slice(-5).filter((tags) => tags.includes('self-correct')).length)
+      .toBeGreaterThan(graObs.slice(0, 5).filter((tags) => tags.includes('self-correct')).length)
+
+    expect(sessionsFor('KAL').every((session) => session.goalData[0].cueLevel === 'moderate')).toBe(true)
+    const umbSessions = sessionsFor('UMB')
+    expect(goalCriterionStatus(goalsFor('UMB')[0], umbSessions).nearing).toBe(true)
+    expect(goalCriterionStatus(goalsFor('UMB')[1], umbSessions).nearing).toBe(false)
+    const vekPoints = goalPoints(goalsFor('VEK')[0].id, sessionsFor('VEK'))
+    expect(vekPoints.slice(-3).every((point) => point.cueLevel === 'independent')).toBe(true)
+    expect(vekPoints.slice(0, 3).every((point) => point.cueLevel === 'moderate')).toBe(true)
+    expect(sessionsFor('ZEP').map((session) => session.standout).join(' ')).toMatch(/picture.*gesture.*spoken/s)
   })
 
-  it('gives K7 different trajectories across its two goals and includes one draft overall', () => {
+  it('keeps generated A/P language consistent with the current goal data and phase', () => {
     const data = buildSampleDataset({ anchorDate })
-    const goals = data.goals.filter((goal) => goal.clientId === SAMPLE_CLIENT_IDS.k7)
-    const sessions = data.sessions.filter((session) => session.clientId === SAMPLE_CLIENT_IDS.k7)
-    const statuses = goals.map((goal) => goalCriterionStatus(goal, sessions))
-    expect(statuses.some((status) => status.met)).toBe(true)
-    expect(statuses.some((status) => !status.met)).toBe(true)
-    expect(data.sessions.filter((session) => session.status === 'draft')).toHaveLength(1)
+    for (const session of data.sessions.filter((record) => record.goalData.length === 1)) {
+      expect(`${session.soap.A} ${session.soap.P}`).not.toMatch(/\b(?:two|both|each)\b/i)
+    }
+    for (const code of ['AV', 'HUX', 'QET', 'SIV', 'TOL']) {
+      const client = data.clients.find((record) => record.code === code)
+      const early = data.sessions.filter((session) => session.clientId === client.id).slice(0, 3)
+      expect(early.map((session) => session.soap.P).join(' ')).not.toMatch(/maintenance/i)
+    }
   })
 
-  it('reports absent, partial, and complete installation states', () => {
+  it('provides stable, valid records for every guide step', () => {
     const data = buildSampleDataset({ anchorDate })
-    expect(sampleDatasetState()).toBe('absent')
-    expect(sampleDatasetState({ clients: data.clients.slice(0, 1) })).toBe('partial')
-    expect(sampleDatasetState(data)).toBe('complete')
+    expect(data.clients.some((client) => client.id === DEMO_GUIDE_TARGETS.clientId)).toBe(true)
+    expect(data.clients.some((client) => client.id === DEMO_GUIDE_TARGETS.progressClientId)).toBe(true)
+    expect(data.sessions.find((session) => session.id === DEMO_GUIDE_TARGETS.draftSessionId)?.status).toBe('draft')
+    expect(data.sessions.find((session) => session.id === DEMO_GUIDE_TARGETS.noteSessionId)?.status).toBe('final')
+    expect(data.sessions.filter((session) => session.groupId === DEMO_GUIDE_TARGETS.groupId)).toHaveLength(4)
   })
 
-  it('contains no identifying-field keys', () => {
+  it('contains no identifying fields or blame/causation language', () => {
     const data = buildSampleDataset({ anchorDate })
-    const forbidden = new Set(['name', 'fullName', 'dob', 'birthDate', 'school', 'teacher'])
+    const forbiddenKeys = new Set(['name', 'fullName', 'dob', 'birthDate', 'school', 'teacher', 'diagnosis'])
     function inspect(value) {
       if (!value || typeof value !== 'object') return
       for (const [key, child] of Object.entries(value)) {
-        expect(forbidden.has(key)).toBe(false)
+        expect(forbiddenKeys.has(key)).toBe(false)
         inspect(child)
       }
     }
     inspect(data)
+    const fixtureText = JSON.stringify(data)
+    expect(fixtureText).not.toMatch(/therapy failed|failed to progress|noncompliant|poor motivation/i)
+    expect(fixtureText).not.toMatch(/\b(?:school|teacher|grade|diagnosis|birthdate|address)\b/i)
+    const assessmentAndPlans = data.sessions.flatMap((session) => [session.soap.A, session.soap.P])
+    expect(assessmentAndPlans.join(' ')).not.toMatch(
+      /\b(?:because|caused|diagnosis|prognosis|normal|expected outcome|will improve)\b/i
+    )
   })
 })

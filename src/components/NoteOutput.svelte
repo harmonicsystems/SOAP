@@ -2,6 +2,7 @@
   import { sessions, clients, appSettings } from '../lib/repo.js'
   import { assembleNote } from '../lib/note.js'
   import SampleTag from './SampleTag.svelte'
+  import { hrefFor } from '../lib/router.js'
 
   let { id } = $props()
 
@@ -29,10 +30,10 @@
 </script>
 
 {#if !session || !client}
-  <p class="muted">Session not found. <a href="#/clients">Back to caseload</a></p>
+  <p class="muted">Session not found. <a href={hrefFor('clients')}>Back to caseload</a></p>
 {:else}
   <div class="toolbar no-print">
-    <a href="#/session/{session.id}">← Back to session</a>
+    <a href={hrefFor(`session/${session.id}`)}>← Back to session</a>
     {#if session.sample}<SampleTag />{/if}
     <span class="tag {session.status === 'final' ? 'good' : 'quiet'}">{session.status}</span>
     <div class="right toolbar" style="margin-bottom:0">
@@ -43,7 +44,7 @@
   {#if session.sample}
     <p class="print-only sample-print-banner">SAMPLE — FICTIONAL DATA</p>
   {/if}
-  <pre class="note-text">{text}</pre>
+  <pre class="note-text" data-guide-target="note-output">{text}</pre>
   {#if $appSettings.therapistName}
     <p class="print-only">Clinician: {$appSettings.therapistName}</p>
   {/if}

@@ -1,4 +1,7 @@
 <script>
+  import { appMode } from '../lib/repo.js'
+  import { hrefFor } from '../lib/router.js'
+
   // In-app Help & About (offline, self-contained). Reachable both when locked
   // (standalone, so a prospective user can read privacy/AI/why before creating
   // a vault) and when unlocked (inside the normal app shell). All static prose.
@@ -6,7 +9,7 @@
 
   const sections = [
     ['quick-start', 'Quick start'],
-    ['sample', 'Sample caseload'],
+    ['demo', 'Public demo'],
     ['session', 'Running a session'],
     ['corpus', 'Making notes yours'],
     ['backups', 'Backups & restore'],
@@ -30,7 +33,7 @@
 <div class:container={locked}>
   {#if locked}
     <div class="toolbar no-print">
-      <a href="#/">← Back</a>
+      <a href={hrefFor('', 'public')}>← Back</a>
     </div>
   {/if}
 
@@ -41,36 +44,67 @@
 
   <nav class="help-toc no-print" aria-label="On this page">
     {#each sections as [id, label]}
-      <a href="#/help" data-target={id} onclick={jump}>{label}</a>
+      <a href={hrefFor('help')} data-target={id} onclick={jump}>{label}</a>
     {/each}
   </nav>
 
   <section class="card" id="quick-start">
     <h2>Quick start</h2>
     <p class="hint">The whole loop, start to finished note, takes about a minute.</p>
+    {#if $appMode !== 'private'}
+      <p>
+        <a class="button-link" href={hrefFor('guide/1', 'demo')}>Open the six-step guided demo</a>
+      </p>
+    {/if}
     <ol>
-      <li><strong>Add a client</strong> on the Caseload screen — initials or a short code only (e.g. <code>JD</code> or <code>S12</code>). Never full names.</li>
-      <li><strong>Add a goal</strong>: pick a domain, choose a template, and fill the blanks — or write your own. The target (accuracy %, cue level, consecutive sessions) lives right on the goal.</li>
-      <li><strong>Start a session</strong> with <em>New session</em>. Each active goal becomes a card.</li>
-      <li><strong>Collect data</strong> by tapping <em>+ Correct</em> / <em>− Incorrect</em> as you work. The running score and percentage update live.</li>
-      <li><strong>The O section writes itself</strong> from your trial data — one sentence per goal, editable any time.</li>
-      <li><strong>View note</strong> → <em>Copy note</em> to paste into your EMR, or <em>Print</em> to save a PDF.</li>
+      <li>
+        <strong>Add a client</strong> on the Caseload screen — initials or a short code only (e.g.
+        <code>JD</code> or <code>S12</code>). Never full names.
+        {#if $appMode !== 'private'}<a href={hrefFor('guide/1', 'demo')}>Try this in the demo</a>.{/if}
+      </li>
+      <li>
+        <strong>Add a goal</strong>: pick a domain, choose a template, and fill the blanks — or write
+        your own. The target (accuracy %, cue level, consecutive sessions) lives right on the goal.
+        {#if $appMode !== 'private'}<a href={hrefFor('guide/2', 'demo')}>Try this in the demo</a>.{/if}
+      </li>
+      <li>
+        <strong>Start a session</strong> with <em>New session</em>. Each active goal becomes a card.
+        {#if $appMode !== 'private'}<a href={hrefFor('guide/4', 'demo')}>Try this in the demo</a>.{/if}
+      </li>
+      <li>
+        <strong>Collect data</strong> by tapping <em>+ Correct</em> / <em>− Incorrect</em> as you work.
+        The running score and percentage update live.
+        {#if $appMode !== 'private'}<a href={hrefFor('guide/4', 'demo')}>Try this in the demo</a>.{/if}
+      </li>
+      <li>
+        <strong>The O section writes itself</strong> from your trial data — one sentence per goal,
+        editable any time. {#if $appMode !== 'private'}<a href={hrefFor('guide/4', 'demo')}>Try this in the demo</a>.{/if}
+      </li>
+      <li>
+        <strong>View note</strong> → <em>Copy note</em> to paste into your EMR, or <em>Print</em> to
+        save a PDF. {#if $appMode !== 'private'}<a href={hrefFor('guide/5', 'demo')}>Try this in the demo</a>.{/if}
+      </li>
     </ol>
   </section>
 
-  <section class="card" id="sample">
-    <h2>Explore with the sample caseload</h2>
+  <section class="card" id="demo">
+    <h2>Explore the public demo</h2>
     <p>
-      On an empty Caseload screen, choose <em>Explore sample caseload</em> to add four fictional
-      clients with about two months of sessions. The sample demonstrates changing accuracy and
-      cueing, criterion streaks, group sessions, finished notes, and progress summaries.
+      <em>See the demo</em> opens the real note-builder with 25 fictional student codes, 35 goals,
+      seven recurring groups, and a full January–April trimester. The six-step guide walks through
+      the caseload, one student record, a plateauing progress graph, a live draft, a final note,
+      and a group session.
     </p>
     <p>
-      Sample records use the real app and are encrypted inside your vault. They are always labeled
-      <span class="tag quiet">sample</span>, contain no real student information, and are not
-      clinical recommendations or expected outcomes. You may edit them freely. Reset or remove
-      the complete sample from <em>Settings → Sample caseload</em>; your own records and settings
-      are left unchanged.
+      Demo records are temporary and remain only in memory; they never enter your encrypted
+      workspace, browser database, or backups. You may edit them freely, then use <em>Reset demo</em>
+      to restore the authored dataset. Leaving or reloading discards every demo change. Never enter
+      real student information in the demo.
+    </p>
+    <p class="hint">
+      The fictional trajectories include improvement, variability, plateaus, lower recent
+      performance, mixed goal results, and cue dependence. They demonstrate the software—not
+      clinical recommendations, norms, predictions, or expected outcomes.
     </p>
   </section>
 
@@ -87,7 +121,7 @@
 
   <section class="card" id="corpus">
     <h2>Making notes yours</h2>
-    <p>The app learns your voice so notes stay specific and real instead of boilerplate:</p>
+    <p>Reuse your own wording so notes stay specific and real instead of boilerplate:</p>
     <ul>
       <li><strong>Save your own phrases</strong> — type a line in the S, A, or P box and tap <em>＋ Save phrase</em>. It becomes a reusable chip. The phrases you use most rise to the top automatically.</li>
       <li><strong>Observation chips &amp; “What stood out?”</strong> — quick-tap what happened on each goal card, and capture the one specific thing worth remembering. Both flow into the O section.</li>
@@ -103,8 +137,9 @@
   <section class="card" id="backups">
     <h2>Backups &amp; restore</h2>
     <p>
-      <strong>Browser storage is not permanent</strong> — a browser can clear it without warning,
-      and there is no cloud copy. Protect your data by exporting backups regularly.
+      In a private workspace, <strong>browser storage is not permanent</strong> — a browser can clear
+      it without warning, and there is no cloud copy. Protect your data by exporting backups
+      regularly.
     </p>
     <ul>
       <li><strong>Export</strong> from <em>Settings → Backup</em> produces a single encrypted file you keep somewhere safe. The header shows how long since your last backup, and a banner reminds you when it's overdue.</li>
@@ -125,7 +160,8 @@
     <h2>Privacy &amp; security</h2>
     <p>This tool holds therapy data, so it is private by design:</p>
     <ul>
-      <li><strong>Encrypted on your device.</strong> Every record is encrypted with AES-GCM. The key is derived from your passphrase with PBKDF2 (310,000 iterations); the passphrase and key are never stored anywhere.</li>
+      <li><strong>Private workspaces are encrypted on your device.</strong> Every private record is encrypted with AES-GCM. The key is derived from your passphrase with PBKDF2 (310,000 iterations); the passphrase and key are never stored anywhere.</li>
+      <li><strong>The public demo is separate and temporary.</strong> Fictional records live only in memory. A direct demo visit does not read, decrypt, or write the private vault; if you first visit Welcome, the app checks only whether a vault exists so it can show the correct private-workspace button. Demo records reset when you leave or reload. Do not put real student information in them.</li>
       <li><strong>Nothing leaves this device.</strong> There are no servers, no accounts, no analytics, no telemetry, and no fonts or scripts loaded from the internet. Nothing you enter is ever transmitted.</li>
       <li><strong>Offline after first load.</strong> The app is downloaded once as static files and then runs entirely offline.</li>
       <li><strong>De-identified by design.</strong> Clients are identified only by initials or short codes — there are no fields for names, dates of birth, or school names.</li>

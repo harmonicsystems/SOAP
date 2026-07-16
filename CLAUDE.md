@@ -1,8 +1,9 @@
 # SOAP Note Builder — architecture & working notes
 
-A local-first, offline, encrypted PWA for a school-based speech-language pathologist: collect
-session trial data live and generate clean, EMR-pasteable SOAP notes fast. No backend — all data
-lives encrypted in the browser. Deploys to GitHub Pages at **soap.harmonic-systems.org**.
+A local-first, offline PWA for a school-based speech-language pathologist: collect session trial
+data live and generate clean, EMR-pasteable SOAP notes fast. Private workspaces are encrypted in
+the browser; the separate public demo contains only bundled fiction in memory. No backend.
+Deploys to GitHub Pages at **soap.harmonic-systems.org**.
 
 Built by Harmonic Systems. This file is the living architecture doc; the original product spec
 (the detailed build prompt) is preserved in git history at the first commit (`cbd7db1`). Tests are
@@ -19,7 +20,7 @@ the source of truth for exact output formats.
   plain text assembly — same input always yields same output. (AI was used to *build* the app; it
   is not *in* the app. This distinction is stated on the Help page and must stay true.)
 - **Bundle budget: total JS ≤ 120 KB gzipped**, enforced by `scripts/check-bundle-size.mjs` in
-  every `npm run build` (CI fails over budget). Currently ~90 KB. **No new runtime dependency
+  every `npm run build` (CI fails over budget). Currently ~106 KB. **No new runtime dependency
   without a size justification in a code comment.** Only runtime dep is Dexie.
 - **Plain CSS** with custom properties (`src/styles/global.css`) — no framework. Low-stimulation
   design: muted palette, generous whitespace, big touch targets, works on a weak Acer/Edge laptop.
@@ -46,9 +47,9 @@ hand-rolled SVG charts · `vite-plugin-pwa` (Workbox) · Vitest. Node 20.17 here
 - `db.js` — Dexie `soap-note-builder`. Data tables store **only `{id, updatedAt, blob}`** where
   `blob` is ciphertext; all queryable fields live *inside* the encrypted payload. `meta` table
   holds vault params (salt, iterations, verification, epoch) + backup/modified timestamps.
-- `repo.js` — the encrypted repository + in-memory Svelte stores. Owns the
-  key (module-var, wiped on lock), the store cache, lock/unlock, CRUD, settings, passphrase change,
-  backup import, sample-dataset lifecycle, and the corpus mutators. See invariants below.
+- `repo.js` — the encrypted repository + shared in-memory Svelte stores. Owns the key (module-var,
+  wiped on lock), private lock/unlock/CRUD/settings/rekey/import, corpus mutators, and the strict
+  `locked|private|demo` lifecycle. Demo mutations update stores only and never touch Dexie.
 - `backup.js` — `SOAPBKP1` file format (magic + salt-len + salt + 4-byte LE iterations + IV +
   ciphertext; self-contained, restore needs only the passphrase). `mergeRecords` (by id, newer
   wins), `mergeCorpusSettings` (merge-mode import), `saveBackupFile` (File System Access API +
@@ -73,19 +74,20 @@ hand-rolled SVG charts · `vite-plugin-pwa` (Workbox) · Vitest. Node 20.17 here
   (includes archived + custom), `visibleObsTags`, `nextCueLevel`.
 - `text.js` (`appendPhrase`, `fmtDate`, `todayISO`, `daysAgoLabel`), `toast.js` (transient toast +
   separate `updateReady` slot for the PWA update prompt), `router.js` (`matchRoute` pure/testable,
-  `navigate` push / `redirect` replace).
+  public/private/demo route modes, mode-preserving `hrefFor`/`navigate`, `redirect` replace).
 
 - `session.js` — `newSessionRecord(clientId, activeGoals, opts)`: the one builder for both
   individual and group sessions (carries `groupId`). Used by ClientDetail and `repo.createGroup`.
-- `sampleData.js` — deterministic, authored fictional caseload (4 clients, 6 goals, 30 sessions,
-  5 linked groups) built relative to an anchor date. Carries `sample:true` +
-  `sampleDataset:'longitudinal-v1'`; O text always flows through production `generateO()`.
+- `sampleData.js` — compact deterministic generator for the most recently completed January–April
+  term: 25 letter-only codes, 35 goals, 268 per-client sessions, 7 recurring groups, and 110 total
+  meetings. Carries `sample:true` + `sampleDataset:'winter-trimester-v2'`; O text always flows
+  through production `generateO()`.
 
-**Components** — `App.svelte` (shell + routing + auto-lock), `LockScreen`, `Header`, `Caseload`
-(+ group creation), `ClientDetail`, `GoalBuilder`, `SessionScreen` (core live screen; `embedded`
-prop for group use), `GoalCard`, `PhraseSection`, `NoteOutput`, `Progress`, `Chart`/`Sparkline`
-(SVG), `Settings`, `Help`, `GroupSession` (client-switcher wrapper reusing SessionScreen),
-`BackupBanner`, `SampleTag`, `Toast`.
+**Components** — `App.svelte` (mode orchestration + private auto-lock), `Welcome`, `LockScreen`
+(create/unlock), `Workspace`, `Header`, `DemoBanner`, `DemoGuide`, `Caseload` (+ group creation),
+`ClientDetail`, `GoalBuilder`, `SessionScreen` (core live screen; `embedded` prop for group use),
+`GoalCard`, `PhraseSection`, `NoteOutput`, `Progress`, `Chart`/`Sparkline` (SVG), `Settings`, `Help`,
+`GroupSession` (client-switcher wrapper reusing SessionScreen), `BackupBanner`, `SampleTag`, `Toast`.
 
 ## Data model (inside encrypted payloads)
 
@@ -119,15 +121,19 @@ Setting: { id:'settings', autoLockMinutes, therapistName?,
 - **Tables store only `{id, updatedAt, blob}`.** Any new queryable field goes *inside* the payload
   and is indexed in memory after unlock, never as a Dexie index.
 - **Key/passphrase are never persisted** and are wiped on lock (`hardLock` also clears the debounced
-  usage timer). `lockNow` first awaits registered `onBeforeLock` hooks (SessionScreen's pending
-  autosave flush) so a lock mid-typing never drops data.
-- **Cross-tab safety via vault epoch.** Record puts/deletes and settings saves capture the epoch
+  usage timer). `lockNow` first awaits registered `onBeforeLock` hooks plus centrally tracked
+  destroy-time writes, so a lock or private→demo route change mid-typing never drops data.
+- **Mode transitions invalidate async private work.** Unlock/create/rekey/import/group creation
+  capture the lifecycle generation, mode, key, and epoch as applicable. Stale completions never
+  publish stores or revive a key after demo entry. Unlock decrypts into local arrays and publishes
+  the private snapshot only after final epoch/generation checks; group creation is one atomic
+  transaction rather than N per-student writes.
+- **Cross-tab safety via vault epoch.** Private record puts/deletes and settings saves capture the epoch
   before asynchronous work, then check it and mutate inside one Dexie transaction (WebCrypto still
   happens before it). External mismatch hard-locks; an operation superseded by a same-tab epoch
-  rotation is dropped. Rekey, import, erase, and sample reset/removal mint an epoch and post to the
-  `soap-vault` BroadcastChannel; other tabs hard-lock. Sample lifecycle rotates once before
-  reloading its destructive-operation snapshot, preventing stale tabs from resurrecting removed
-  records.
+  rotation is dropped. Rekey, import, and erase mint an epoch and post to the `soap-vault`
+  BroadcastChannel; other private tabs hard-lock. Demo tabs hold no private key and ignore vault
+  epoch messages.
 - **Corpus state is section-scoped.** `phraseUsage` and `phraseDomains` key on `phraseKey(section,
   text)` (whitespace-collapsed, lowercased). `rankedBank` falls back to legacy plain-text keys for
   pre-round-3 data. Identical text in two sections must never share/clobber state.
@@ -175,31 +181,37 @@ autosave via `onDestroy`. Every per-client path (notes, progress, caseload, back
 because the underlying records are ordinary sessions. Ranking/nudge naturally exclude other group
 members (they filter by `clientId`).
 
-## Fictional longitudinal sample caseload
+## Public demo and application modes
 
-An unlocked user can explicitly install the `longitudinal-v1` sample from empty Caseload or
-Settings. It uses ordinary encrypted records so notes, progress, group switching, backup, lock,
-copy, and print exercise the real app. The four authored arcs demonstrate noisy improvement,
-accuracy versus cue dependence, different goal trajectories, and contextual variability. All
-sample screens carry visible `sample` text; printed sample notes add a banner outside the copied
-note string.
+`#/` is a public Welcome screen with two separate paths: passphrase-free **See the demo**, or
+Create/Unlock a private workspace. Public routes are `#/`, `#/create`, `#/unlock`, and `#/help`;
+private app routes retain their original unprefixed hashes. Every demo route begins `#/demo/...`,
+including direct client, progress, session, note, group, Help, and six guide routes. `hrefFor()`
+preserves the active mode so ordinary production components work in both workspaces.
 
-Installation/reset and removal are atomic, epoch-changing repository operations. Before any
-replacement, installation rejects case-insensitive collisions with normal client codes and raw or
-decrypted occupants of reserved canonical IDs. New goals/sessions under a sample client inherit
-the marker; sample and personal clients cannot be mixed in a new group. Removal matches the exact
-dataset marker and leaves normal records/settings/corpus untouched. `sampleData.test.js` locks the
-fixture's determinism, references, clinical arcs, trial validity, generated O text, and criterion
-outcomes; repository tests lock encryption, collision, epoch, repair/reset, and removal behavior.
+The demo reuses the production stores, record shapes, note generator, charts, and UI components,
+but `enterDemo()` first flushes pending private autosaves, wipes the private key/cache, and then
+populates bundled fiction. Demo `putRecord`, delete, settings, corpus, and group writes are memory
+only. Reset/reload/exit rebuilds or wipes those stores. Private-only Settings/backup/import/rekey
+surfaces have no demo route, and demo records never enter Dexie or backups. Repository tests compare
+all IndexedDB rows before/after demo mutation and then re-unlock a private sentinel.
+
+The canonical `winter-trimester-v2` fixture uses 25 unique 2–3 letter uppercase codes and exactly
+35 goals/268 session records. Student-level outcome distribution is test-locked at 5 clear,
+6 modest/noisy, 5 plateau, 3 lower-recent, 4 mixed-goal, and 2 cue-dependent. Only 5 goals meet
+criterion; 28 remain active and 2 are discontinued/reframed. A/P wording is neutral and never
+attributes a cause for flat or lower performance. `DemoGuide` renders the actual Caseload, Client,
+Progress (plateauing MEP), Session, Note, and Group components—not screenshots or mock controls.
 
 ## Security & lock model
 
-App opens locked. Auto-lock after N idle minutes (configurable) or >5 min tab-hidden (a timer fires
-*while* hidden, not only on return). Locking wipes the in-memory key and decrypted cache. Passphrase
-loss = permanent data loss — onboarding + Settings + Help say so, and push regular backups. Request
-`navigator.storage.persist()` on unlock. Backup nag banner when changes are >7 days newer than the
-last export. Help is reachable while locked (standalone, for reading privacy before creating a
-vault); if the app locks *while on Help*, an effect routes to the lock screen.
+App opens on public Welcome; private routes remain locked until passphrase unlock. Auto-lock after
+N idle minutes (configurable) or >5 min tab-hidden runs only in private mode (the timer fires while
+hidden, not only on return). Locking wipes the in-memory key and every decrypted store. Passphrase
+loss = permanent data loss — Welcome/onboarding + Settings + Help say so, and push regular backups.
+Request `navigator.storage.persist()` on unlock. Backup nag banner when changes are >7 days newer
+than the last export. Help remains reachable before vault creation/unlock. Entering demo from an
+unlocked private route awaits `onBeforeLock` hooks before wiping and loading fiction.
 
 ---
 
@@ -208,7 +220,7 @@ vault); if the app locks *while on Help*, an effect routes to the lock screen.
 ```
 npm install
 npm run dev        # dev server (hot reload, no service worker)
-npm test           # vitest — 89 tests across lib (crypto, backup, corpus, sample, repo, note, …)
+npm test           # vitest — 99 tests across lib (crypto, backup, corpus, demo, repo, note, …)
 npm run build      # vite build + gzip bundle-size gate (fails > 120 KB)
 npm run preview    # serve the production build (has the service worker)
 npm run icons      # regenerate public/icon-*.png (zero-dep PNG encoder; only if the mark changes)
@@ -229,8 +241,8 @@ does not apply here (no cron in this workflow).
 
 ## How we work on this project
 
-Each feature round: implement → `npm test` + `npm run build` → verify live in-browser (Claude
-Preview MCP against `npm run preview`) → run an **adversarial multi-agent review** (parallel finders
+Each feature round: implement → `npm test` + `npm run build` → verify live in-browser against
+`npm run preview` → run an **adversarial multi-agent review** (parallel finders
 by dimension → 3-judge refute panel per finding, keep those upheld ≥2/3) → fix confirmed findings,
 re-verify → commit. This has caught real bugs every round (cross-tab vault corruption, lock-time
 data loss, split corpus state, merge-import tag loss). For any change touching privacy/security or

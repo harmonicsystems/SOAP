@@ -178,6 +178,29 @@ button:disabled {
   color: var(--accent);
 }
 
+.button-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.5rem 0.9rem;
+  color: var(--ink);
+  background: var(--surface);
+  text-decoration: none;
+}
+
+.button-link:hover {
+  background: var(--accent-soft);
+}
+
+.button-link.btn-primary {
+  color: var(--accent-ink);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
 /* ---- chips ---- */
 
 .chips {
@@ -288,6 +311,33 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.demo-banner {
+  background: var(--warn-soft);
+  border-bottom: 1px solid #e5d9b8;
+  padding: 0.6rem max(1rem, calc((100vw - 880px) / 2));
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.demo-banner strong,
+.demo-banner span {
+  display: block;
+}
+
+.demo-banner span {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.demo-actions {
+  display: flex;
+  gap: 0.5rem;
   flex-wrap: wrap;
 }
 
@@ -519,6 +569,115 @@ button.undo {
   max-width: 430px;
 }
 
+.workspace-card {
+  max-width: 680px;
+}
+
+.welcome-wrap {
+  min-height: 100vh;
+  padding: 2rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.welcome-card {
+  width: 100%;
+  max-width: 880px;
+}
+
+.welcome-card > h1 {
+  max-width: 720px;
+  font-size: clamp(1.75rem, 4vw, 2.5rem);
+}
+
+.eyebrow {
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin: 0 0 0.45rem;
+}
+
+.welcome-lead {
+  max-width: 720px;
+  color: var(--muted);
+  font-size: 1.05rem;
+}
+
+.welcome-actions,
+.capability-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin: 1.25rem 0;
+}
+
+.choice-card,
+.know-first {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1rem;
+}
+
+.choice-card.featured {
+  border-color: var(--accent);
+}
+
+.choice-card p {
+  min-height: 3rem;
+}
+
+.know-first ul,
+.capability-grid ul {
+  margin-bottom: 0;
+  padding-left: 1.25rem;
+}
+
+.welcome-help {
+  text-align: center;
+  margin-top: 1rem;
+}
+
+.ack-list {
+  display: grid;
+  gap: 0.6rem;
+  margin: 0.75rem 0;
+}
+
+.ack-list label {
+  display: flex;
+  gap: 0.55rem;
+  align-items: flex-start;
+  color: var(--ink);
+}
+
+.ack-list input {
+  margin-top: 0.25rem;
+}
+
+.public-links {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+  font-size: 0.85rem;
+}
+
+@media (max-width: 640px) {
+  .welcome-actions,
+  .capability-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .choice-card p {
+    min-height: 0;
+  }
+}
+
 .lock-card input[type='password'] {
   width: 100%;
   font-size: 1.05rem;
@@ -594,6 +753,51 @@ button.undo {
 .sample-guide {
   border-left: 3px solid var(--accent);
   background: var(--accent-soft);
+}
+
+/* Guided demo: the callout stays light; the highlighted element is still the
+   production component rather than a screenshot or a forked mock-up. */
+.guide-panel {
+  border-left: 4px solid var(--accent);
+  background: var(--accent-soft);
+}
+
+.guide-panel h1:focus {
+  outline: none;
+}
+
+.guide-panel > p:not(.eyebrow) {
+  margin: 0.25rem 0 0.9rem;
+}
+
+.guide-nav {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.guide-step-1 [data-guide-target='caseload-list'],
+.guide-step-2 [data-guide-target='student-goals'],
+.guide-step-3 [data-guide-target='progress-chart'],
+.guide-step-4 [data-guide-target='trial-card'],
+.guide-step-5 [data-guide-target='note-output'],
+.guide-step-6 [data-guide-target='group-switcher'] {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+  scroll-margin-top: 8rem;
+}
+
+.guide-screen {
+  padding-top: 0.25rem;
+}
+
+.demo-summary {
+  border-left: 3px solid var(--accent);
+}
+
+.demo-summary > p:last-child {
+  margin-bottom: 0;
 }
 
 /* Help page: in-page jump-link nav (hidden in print). */

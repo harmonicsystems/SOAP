@@ -10,10 +10,12 @@
     appSettings,
     putRecord,
     onBeforeLock,
+    trackPendingWrite,
+    markDemoChanged,
     recordPhraseUse,
     savePhrase
   } from '../lib/repo.js'
-  import { navigate } from '../lib/router.js'
+  import { navigate, hrefFor } from '../lib/router.js'
   import { todayISO, fmtDate } from '../lib/text.js'
   import { SESSION_SETTINGS, visibleObsTags } from '../lib/constants.js'
   import { generateO } from '../lib/ogen.js'
@@ -112,8 +114,11 @@
   function scheduleSave() {
     if (!working) return
     saveState = 'pending'
+    // A quick edit followed immediately by Reset must still trigger the
+    // confirmation before the 400 ms persistence debounce fires.
+    markDemoChanged()
     clearTimeout(saveTimer)
-    saveTimer = setTimeout(flush, 400)
+    saveTimer = setTimeout(startFlush, 400)
   }
 
   async function flush() {
@@ -124,14 +129,18 @@
     if (saved) saveState = 'saved'
   }
 
+  function startFlush() {
+    return trackPendingWrite(flush())
+  }
+
   onDestroy(() => {
-    if (saveTimer) flush()
+    if (saveTimer) startFlush()
   })
 
   // Lock must not lose pending debounced edits: repo.lockNow() awaits this
   // flush while the key is still valid, then wipes.
   $effect(() => {
-    const off = onBeforeLock(flush)
+    const off = onBeforeLock(startFlush)
     return off
   })
 
@@ -291,13 +300,13 @@
 <svelte:window onkeydown={onKey} onpagehide={() => saveTimer && flush()} />
 
 {#if !working || !client}
-  <p class="muted">Session not found. <a href="#/clients">Back to caseload</a></p>
+  <p class="muted">Session not found. <a href={hrefFor('clients')}>Back to caseload</a></p>
 {:else}
   <div class="toolbar no-print">
     {#if embedded}
       <strong>{client.code}</strong>
     {:else}
-      <a href="#/client/{client.id}">← {client.code}</a>
+      <a href={hrefFor(`client/${client.id}`)}>← {client.code}</a>
     {/if}
     {#if working.sample}<SampleTag />{/if}
     <span class="muted" aria-live="polite">{saveState === 'saved' ? 'Saved' : 'Saving…'}</span>
@@ -308,7 +317,7 @@
       {:else}
         <button onclick={finalize}>Finalize</button>
       {/if}
-      <a href="#/session/{working.id}/note"><button class="btn-primary">View note</button></a>
+      <a href={hrefFor(`session/${working.id}/note`)}><button class="btn-primary">View note</button></a>
     </div>
   </div>
 
@@ -364,25 +373,27 @@
 
   {#if cards.length === 0}
     <p class="muted">
-      No active goals for this client. <a href="#/client/{client.id}">Add goals first.</a>
+      No active goals for this client. <a href={hrefFor(`client/${client.id}`)}>Add goals first.</a>
     </p>
   {/if}
 
   {#each cards as { gd, goal }, i (gd.goalId)}
-    <GoalCard
-      {goal}
-      {gd}
-      obsTags={visibleObsTags($appSettings, gd.observations ?? [])}
-      selected={i === selected && !isFinal}
-      disabled={isFinal}
-      canUndo={(stacks[gd.goalId]?.length ?? 0) > 0}
-      ontap={(correct) => {
-        selected = i
-        tap(gd, correct)
-      }}
-      onundo={() => undo(gd)}
-      onchange={scheduleSave}
-    />
+    <div data-guide-target={i === 0 ? 'trial-card' : undefined}>
+      <GoalCard
+        {goal}
+        {gd}
+        obsTags={visibleObsTags($appSettings, gd.observations ?? [])}
+        selected={i === selected && !isFinal}
+        disabled={isFinal}
+        canUndo={(stacks[gd.goalId]?.length ?? 0) > 0}
+        ontap={(correct) => {
+          selected = i
+          tap(gd, correct)
+        }}
+        onundo={() => undo(gd)}
+        onchange={scheduleSave}
+      />
+    </div>
   {/each}
 
   <section class="card" style="border-left:3px solid var(--accent)">

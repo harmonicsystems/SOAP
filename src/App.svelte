@@ -1,49 +1,98 @@
 <script>
-  import { onMount } from 'svelte'
   import { route, redirect } from './lib/router.js'
-  import { locked, appSettings, checkVault, lockNow, loadWarnings } from './lib/repo.js'
+  import {
+    locked,
+    appMode,
+    hasVault,
+    appSettings,
+    checkVault,
+    enterDemo,
+    exitDemo,
+    lockNow,
+    loadWarnings
+  } from './lib/repo.js'
   import { toast } from './lib/toast.js'
+  import Welcome from './components/Welcome.svelte'
   import LockScreen from './components/LockScreen.svelte'
-  import Header from './components/Header.svelte'
-  import BackupBanner from './components/BackupBanner.svelte'
-  import Toast from './components/Toast.svelte'
-  import Caseload from './components/Caseload.svelte'
-  import ClientDetail from './components/ClientDetail.svelte'
-  import SessionScreen from './components/SessionScreen.svelte'
-  import NoteOutput from './components/NoteOutput.svelte'
-  import Progress from './components/Progress.svelte'
-  import Settings from './components/Settings.svelte'
+  import Workspace from './components/Workspace.svelte'
   import Help from './components/Help.svelte'
-  import GroupSession from './components/GroupSession.svelte'
+  import Toast from './components/Toast.svelte'
 
-  onMount(() => {
-    checkVault()
-  })
+  let demoLoading = $state(false)
+  let demoError = $state('')
+  let demoFailed = $state(false)
+  let demoAttempt = $state(0)
+  let vaultCheckStarted = $state(false)
+  let privateHelpOpen = $state(false)
 
-  // The app opens locked; after unlock, '#/' lands on the caseload.
-  // redirect (history replace), not navigate (push) — a push would re-trap the
-  // Back button in an endless '#/' → '#/clients' loop.
+  // A direct demo route must not touch even private-vault metadata. If the
+  // visitor later returns to a public/private entry screen, check then.
   $effect(() => {
-    if (!$locked && ($route.name === 'lock' || $route.name === 'notfound')) redirect('clients')
-  })
-
-  // If the app locks (auto-lock or manual) while the Help page is open, send the
-  // user to the lock screen — the standalone locked-Help view has no passphrase
-  // field. A prospective reader who opened Help *while already locked* never
-  // triggered a lock transition (seenUnlocked stays false), so they keep it.
-  let seenUnlocked = false
-  $effect(() => {
-    if (!$locked) {
-      seenUnlocked = true
-      return
+    if ($route.mode !== 'demo' && $hasVault === null && !vaultCheckStarted) {
+      vaultCheckStarted = true
+      checkVault()
     }
-    if (seenUnlocked && $route.name === 'help') redirect('')
-    seenUnlocked = false
   })
 
-  // Surface rows that failed decryption on unlock (corruption tolerance).
+  // Route mode and data mode are separate on purpose. A demo route first
+  // flushes/locks any private workspace, then populates only in-memory stores.
   $effect(() => {
-    if (!$locked && $loadWarnings > 0) {
+    demoAttempt
+    const wantsDemo = $route.mode === 'demo'
+    if (wantsDemo && $appMode !== 'demo' && !demoLoading && !demoFailed) {
+      demoLoading = true
+      demoError = ''
+      enterDemo()
+        .catch(() => {
+          demoError = 'Could not prepare the fictional demo. Reload and try again.'
+          demoFailed = true
+        })
+        .finally(() => {
+          demoLoading = false
+        })
+    } else if (!wantsDemo && $appMode === 'demo') {
+      exitDemo()
+    } else if (!wantsDemo) {
+      demoFailed = false
+      demoError = ''
+    }
+  })
+
+  function retryDemo() {
+    demoError = ''
+    demoFailed = false
+    demoAttempt++
+  }
+
+  $effect(() => {
+    if ($route.mode === 'demo' && $route.name === 'demo-entry') redirect('guide/1', 'demo')
+    if ($route.mode === 'public' && $route.name === 'notfound') redirect('', 'public')
+    if (
+      $appMode === 'private' &&
+      $route.mode === 'public' &&
+      ['create', 'unlock'].includes($route.name)
+    ) {
+      redirect('clients', 'private')
+    }
+  })
+
+  // Help is available before unlock, but if an already-unlocked private
+  // workspace locks while Help is open, make the lock transition explicit.
+  $effect(() => {
+    if ($route.name === 'help' && $appMode === 'private') {
+      privateHelpOpen = true
+    } else if ($route.name === 'help' && $appMode === 'locked' && privateHelpOpen) {
+      privateHelpOpen = false
+      redirect('unlock', 'public')
+    } else if ($route.name !== 'help') {
+      privateHelpOpen = false
+    }
+  })
+
+  // Surface rows that failed decryption only in a private workspace. The demo
+  // never reads IndexedDB and therefore cannot have decryption warnings.
+  $effect(() => {
+    if ($appMode === 'private' && !$locked && $loadWarnings > 0) {
       toast.show(
         `${$loadWarnings} record${$loadWarnings === 1 ? '' : 's'} could not be decrypted and ${$loadWarnings === 1 ? 'was' : 'were'} skipped. Restore from a backup if data is missing.`,
         null,
@@ -52,9 +101,11 @@
     }
   })
 
-  // Auto-lock: idle > N minutes (configurable) or tab hidden > 5 minutes (spec §2.3).
+  // Private data auto-locks after inactivity or a long hidden interval. Demo
+  // data has no key and is already temporary, so the private lock timer does
+  // not run there.
   $effect(() => {
-    if ($locked) return
+    if ($appMode !== 'private' || $locked) return
     const minutes = $appSettings.autoLockMinutes ?? 15
     let lastActivity = Date.now()
     let hiddenAt = null
@@ -63,17 +114,13 @@
       lastActivity = Date.now()
     }
     const events = ['pointerdown', 'keydown', 'wheel', 'touchstart']
-    events.forEach((e) => addEventListener(e, activity, { passive: true }))
+    events.forEach((event) => addEventListener(event, activity, { passive: true }))
     const tick = setInterval(() => {
       if (Date.now() - lastActivity > minutes * 60000) lockNow()
     }, 15000)
     const onVisibility = () => {
       if (document.hidden) {
         hiddenAt = Date.now()
-        // Lock WHILE hidden, not just on return — the key and decrypted data
-        // must not sit in memory for the whole hidden period (spec §2.3).
-        // Background timers can be throttled; the visible-again check below is
-        // the backstop.
         clearTimeout(hiddenTimer)
         hiddenTimer = setTimeout(() => lockNow(), 5 * 60000)
       } else {
@@ -84,7 +131,7 @@
     }
     document.addEventListener('visibilitychange', onVisibility)
     return () => {
-      events.forEach((e) => removeEventListener(e, activity))
+      events.forEach((event) => removeEventListener(event, activity))
       clearInterval(tick)
       clearTimeout(hiddenTimer)
       document.removeEventListener('visibilitychange', onVisibility)
@@ -92,35 +139,40 @@
   })
 </script>
 
-{#if $locked}
-  <!-- Help is readable before unlock so a prospective user can see the privacy,
-       AI-disclosure, and why sections before committing a passphrase. -->
-  {#if $route.name === 'help'}
-    <Help locked />
+{#if $route.mode === 'demo'}
+  {#if $appMode === 'demo'}
+    <Workspace demo />
   {:else}
-    <LockScreen />
+    <main class="lock-wrap">
+      <div class="lock-card">
+        <h1>{demoFailed ? 'The demo could not be prepared' : 'Preparing fictional demo…'}</h1>
+        <p class="muted">No passphrase is needed. Nothing here is saved.</p>
+        {#if demoError}<p class="error-text" role="alert">{demoError}</p>{/if}
+        {#if demoFailed}
+          <div class="actions">
+            <button class="btn-primary" onclick={retryDemo}>Retry demo</button>
+            <a class="button-link" href="#/">Return to welcome</a>
+          </div>
+        {/if}
+      </div>
+    </main>
+  {/if}
+{:else if $route.name === 'welcome'}
+  <Welcome />
+{:else if $route.name === 'create'}
+  <LockScreen screen="create" />
+{:else if $route.name === 'unlock'}
+  <LockScreen screen="unlock" />
+{:else if $route.name === 'help' && $appMode !== 'private'}
+  <Help locked />
+{:else if $route.mode === 'private' || ($route.name === 'help' && $appMode === 'private')}
+  {#if $appMode === 'private' && !$locked}
+    <Workspace />
+  {:else}
+    <LockScreen screen="auto" />
   {/if}
 {:else}
-  <Header />
-  <BackupBanner />
-  <main class="container">
-    {#if $route.name === 'clients'}
-      <Caseload />
-    {:else if $route.name === 'client'}
-      <ClientDetail id={$route.params.id} />
-    {:else if $route.name === 'progress'}
-      <Progress id={$route.params.id} />
-    {:else if $route.name === 'session'}
-      <SessionScreen id={$route.params.id} />
-    {:else if $route.name === 'group'}
-      <GroupSession groupId={$route.params.groupId} />
-    {:else if $route.name === 'note'}
-      <NoteOutput id={$route.params.id} />
-    {:else if $route.name === 'settings'}
-      <Settings />
-    {:else if $route.name === 'help'}
-      <Help />
-    {/if}
-  </main>
+  <Welcome />
 {/if}
+
 <Toast />

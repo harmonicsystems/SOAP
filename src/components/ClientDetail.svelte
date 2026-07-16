@@ -1,6 +1,6 @@
 <script>
   import { clients, goals, sessions, putRecord, deleteRecord } from '../lib/repo.js'
-  import { navigate } from '../lib/router.js'
+  import { navigate, hrefFor } from '../lib/router.js'
   import { DOMAINS, domainLabel } from '../lib/constants.js'
   import { goalCriterionStatus, goalPoints } from '../lib/progress.js'
   import { shortLabelFor } from '../lib/ogen.js'
@@ -57,10 +57,10 @@
 </script>
 
 {#if !client}
-  <p class="muted">Client not found. <a href="#/clients">Back to caseload</a></p>
+  <p class="muted">Client not found. <a href={hrefFor('clients')}>Back to caseload</a></p>
 {:else}
   <div class="toolbar">
-    <a href="#/clients">← Caseload</a>
+    <a href={hrefFor('clients')}>← Caseload</a>
   </div>
 
   <div class="toolbar">
@@ -69,7 +69,7 @@
     {#if client.archived}<span class="tag quiet">archived</span>{/if}
     <div class="right toolbar" style="margin-bottom:0">
       <button class="btn-primary" onclick={newSession}>New session</button>
-      <a href="#/client/{client.id}/progress"><button>Progress</button></a>
+      <a href={hrefFor(`client/${client.id}/progress`)}><button>Progress</button></a>
       <button onclick={toggleArchive}>{client.archived ? 'Unarchive' : 'Archive'}</button>
     </div>
   </div>
@@ -94,7 +94,7 @@
     {/if}
   </div>
 
-  <div class="toolbar">
+  <div class="toolbar" data-guide-target="student-goals">
     <h2 style="margin:0">Goals</h2>
     <button class="right" onclick={() => (editingGoal = 'new')}>+ Add goal</button>
   </div>
@@ -157,11 +157,11 @@
           <span class="muted">{session.durationMin} min · {session.setting}</span>
           <span class="tag {session.status === 'final' ? 'good' : 'quiet'}">{session.status}</span>
           {#if session.groupId}
-            <a href="#/group/{session.groupId}" class="tag">group ↗</a>
+            <a href={hrefFor(`group/${session.groupId}`)} class="tag">group ↗</a>
           {/if}
           <div class="right toolbar" style="margin-bottom:0">
-            <a href="#/session/{session.id}"><button>Open</button></a>
-            <a href="#/session/{session.id}/note"><button>Note</button></a>
+            <a href={hrefFor(`session/${session.id}`)}><button>Open</button></a>
+            <a href={hrefFor(`session/${session.id}/note`)}><button>Note</button></a>
             {#if session.status === 'draft'}
               <button class="btn-quiet" onclick={() => deleteDraft(session)}>Delete</button>
             {/if}

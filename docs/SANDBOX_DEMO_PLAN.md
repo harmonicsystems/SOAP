@@ -1,7 +1,7 @@
 # Sandbox demo — implementation plan
 
-- Status: implemented and technically verified on `codex/sandbox-demo`; human SLP content review
-  pending before merge
+- Status: superseded by `F-007` public demo on `codex/public-demo-onboarding`; retained as the
+  historical in-vault prototype plan
 - Feature ID: `F-006`
 - Working name in the UI: **Sample caseload**
 - Primary audience: school-based SLPs evaluating SOAP Note Builder
@@ -10,6 +10,11 @@
 - Implementation owner: Codex
 - Independent reviewers: Codex adversarial security, clinical-data, and UI/accessibility agents;
   human/Claude review still welcome before merge
+
+> **Supersession notice (2026-07-15):** The encrypted in-vault installation described below is no
+> longer the intended product. `docs/PUBLIC_DEMO_ONBOARDING_PLAN.md` replaces it with a public,
+> passphrase-free, memory-only demo. Private workspaces now begin empty; fictional records never
+> enter IndexedDB or backups. This document remains for decision history and prototype context.
 
 ## 1. Summary
 

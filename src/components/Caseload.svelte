@@ -3,32 +3,21 @@
     clients,
     goals,
     sessions,
+    appMode,
     putRecord,
-    createGroup,
-    installSampleDataset
+    createGroup
   } from '../lib/repo.js'
   import { navigate } from '../lib/router.js'
   import { goalCriterionStatus } from '../lib/progress.js'
   import { fmtDate, todayISO } from '../lib/text.js'
   import { MIN_GROUP_SIZE, MAX_GROUP_SIZE } from '../lib/constants.js'
-  import {
-    SAMPLE_CLIENT_IDS,
-    SAMPLE_GROUP_IDS,
-    isSampleRecord,
-    sampleDatasetState
-  } from '../lib/sampleData.js'
-  import { toast } from '../lib/toast.js'
+  import { DEMO_DATASET_SUMMARY } from '../lib/sampleData.js'
   import SampleTag from './SampleTag.svelte'
 
   let search = $state('')
   let showArchived = $state(false)
   let newCode = $state('')
   let addError = $state('')
-  let sampleBusy = $state(false)
-
-  const sampleState = $derived(
-    sampleDatasetState({ clients: $clients, goals: $goals, sessions: $sessions })
-  )
 
   // ---- group session creation ----
   let groupMode = $state(false)
@@ -65,7 +54,7 @@
         setting: 'group'
       })
       if (gid) navigate(`group/${gid}`)
-      else groupError = 'Keep fictional sample clients and your own clients in separate groups.'
+      else groupError = 'Could not create the group. Try again.'
     } finally {
       groupBusy = false
     }
@@ -113,32 +102,22 @@
     navigate(`client/${rec.id}`)
   }
 
-  async function installSample() {
-    const action = sampleState === 'absent' ? 'Add' : 'Reset'
-    const detail =
-      sampleState === 'absent'
-        ? 'It will appear alongside any clients you add and can be removed later from Settings.'
-        : 'This replaces all edits made to the fictional sample records.'
-    if (!confirm(`${action} the fictional sample caseload? ${detail}`)) return
-    sampleBusy = true
-    try {
-      const ok = await installSampleDataset(todayISO())
-      toast.show(ok ? 'Sample caseload ready' : 'Could not install sample caseload')
-    } catch (error) {
-      const message =
-        error.message === 'sample-code-conflict'
-          ? `Sample not added: your caseload already uses ${error.conflicts.join(', ')}. Change that code before trying again.`
-          : error.message === 'sample-id-conflict'
-            ? 'Sample not added because an existing record uses a reserved sample ID. Your existing data was not changed.'
-          : 'Sample setup was interrupted. Use Repair sample caseload to try again.'
-      toast.show(message, null, 8000)
-    } finally {
-      sampleBusy = false
-    }
-  }
 </script>
 
 <h1>Caseload</h1>
+
+{#if $appMode === 'demo'}
+  <section class="card demo-summary" aria-label="Fictional demo dataset summary">
+    <p class="eyebrow">Winter trimester · January–April</p>
+    <h2>{DEMO_DATASET_SUMMARY.clients} fictional students · {DEMO_DATASET_SUMMARY.sessions} session records</h2>
+    <p>
+      The caseload includes {DEMO_DATASET_SUMMARY.goals} goals and {DEMO_DATASET_SUMMARY.groups}
+      recurring groups. Its progress patterns include improvement, noisy change, plateaus, lower
+      recent performance, mixed goal results, and cue dependence.
+    </p>
+    <p class="hint">These scenarios show product behavior—not clinical norms or expected outcomes.</p>
+  </section>
+{/if}
 
 <div class="card">
   <form class="field-row" onsubmit={addClient}>
@@ -161,58 +140,6 @@
   </p>
 </div>
 
-{#if sampleState === 'partial'}
-  <div class="card" style="border-left:3px solid var(--bad)">
-    <h2>Sample caseload needs repair</h2>
-    <p>
-      Part of the fictional example is missing. Repair restores the complete sample and replaces
-      any changes made to its records; your own records and settings are not changed.
-    </p>
-    <button class="btn-primary" onclick={installSample} disabled={sampleBusy}>
-      {sampleBusy ? 'Repairing sample…' : 'Repair sample caseload'}
-    </button>
-  </div>
-{:else if $clients.length === 0 && sampleState === 'absent'}
-  <div class="card" style="border-left:3px solid var(--accent)">
-    <h2>Want to see how this works over time?</h2>
-    <p>
-      Add a fictional caseload with about two months of sessions. Explore finished notes, group
-      sessions, progress charts, and summaries. Everything is sample data and stays encrypted in
-      this browser.
-    </p>
-    <button class="btn-primary" onclick={installSample} disabled={sampleBusy}>
-      {sampleBusy ? 'Preparing sample…' : 'Explore sample caseload'}
-    </button>
-  </div>
-{/if}
-
-{#if sampleState === 'complete'}
-  <div class="card sample-guide">
-    <div class="toolbar" style="margin-bottom:0.25rem">
-      <h2 style="margin:0">Start with the longitudinal story</h2>
-      <SampleTag />
-    </div>
-    <ol style="margin-bottom:0">
-      <li>
-        <a href="#/client/{SAMPLE_CLIENT_IDS.m14}">Open M14</a> and compare the first and latest
-        notes.
-      </li>
-      <li>
-        <a href="#/client/{SAMPLE_CLIENT_IDS.m14}/progress">Open Progress</a> to see accuracy and
-        cueing change over time.
-      </li>
-      <li>
-        <a href="#/group/{SAMPLE_GROUP_IDS.recent}">Open the recent sample group</a> to see a
-        separate session and note for each student.
-      </li>
-    </ol>
-    <p class="hint" style="margin-top:0.6rem; margin-bottom:0">
-      All sample clients, sessions, and clinical details are fictional. Remove or reset them in
-      Settings at any time.
-    </p>
-  </div>
-{/if}
-
 <div class="card">
   <div class="toolbar" style="margin-bottom:0">
     <h3 style="margin:0">Group session</h3>
@@ -232,9 +159,6 @@
         Pick {MIN_GROUP_SIZE}–{MAX_GROUP_SIZE} students. Each gets their own session and note; you
         enter data for all of them on one screen.
       </p>
-      {#if activeClients.some(isSampleRecord) && activeClients.some((client) => !isSampleRecord(client))}
-        <p class="hint">Fictional sample clients and your own clients are kept in separate groups.</p>
-      {/if}
       <div class="field-row">
         <div class="field" style="margin-bottom:0">
           <label for="grp-date">Date</label>
@@ -252,17 +176,14 @@
         <div class="chips">
           {#each activeClients as c (c.id)}
             {@const picked = groupSel.includes(c.id)}
-            {@const first = activeClients.find((client) => client.id === groupSel[0])}
-            {@const mixed = first && isSampleRecord(first) !== isSampleRecord(c)}
             <button
               type="button"
               class="chip"
               class:active={picked}
-              disabled={!picked && (groupSel.length >= MAX_GROUP_SIZE || mixed)}
-              title={mixed ? 'Keep sample clients and your own clients in separate groups' : ''}
+              disabled={!picked && groupSel.length >= MAX_GROUP_SIZE}
               onclick={() => toggleGroupClient(c.id)}
             >
-              {c.code}{#if isSampleRecord(c)} · sample{/if} · {activeGoalCount(c.id)} goal{activeGoalCount(c.id) === 1 ? '' : 's'}
+              {c.code}{#if c.sample} · demo{/if} · {activeGoalCount(c.id)} goal{activeGoalCount(c.id) === 1 ? '' : 's'}
             </button>
           {/each}
         </div>
@@ -291,7 +212,7 @@
 {#if visible.length === 0}
   <p class="muted">No clients yet. Add your first client above.</p>
 {:else}
-  <div class="row-list">
+  <div class="row-list" data-guide-target="caseload-list">
     {#each visible as client (client.id)}
       {@const s = stats(client)}
       <div

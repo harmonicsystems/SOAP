@@ -1,534 +1,503 @@
-// Deterministic, entirely fictional longitudinal caseload used to demonstrate
-// the real encrypted app. No randomness and no runtime fetches: a fixed anchor
-// date always produces the same ordinary Client/Goal/Session payloads.
+// Deterministic fictional January–April caseload for the public demo. Compact
+// authored profiles expand into ordinary Client/Goal/Session payloads. No
+// randomness, persistence, network access, diagnoses, names, or school data.
 import { generateO } from './ogen.js'
 
-export const SAMPLE_DATASET_ID = 'longitudinal-v1'
+export const SAMPLE_DATASET_ID = 'winter-trimester-v2'
+const prefix = `demo-${SAMPLE_DATASET_ID}`
 
-const prefix = `sample-${SAMPLE_DATASET_ID}`
+const goal = (
+  label,
+  target,
+  arc,
+  status = 'active',
+  startWeek = 0,
+  endWeek = 12,
+  criterion = null
+) => ({ label, target, arc, status, startWeek, endWeek, criterion })
 
-export const SAMPLE_CLIENT_IDS = Object.freeze({
-  m14: `${prefix}-client-m14`,
-  k7: `${prefix}-client-k7`,
-  p3: `${prefix}-client-p3`,
-  t9: `${prefix}-client-t9`
-})
+// Student-level outcome classes intentionally include flat and lower recent
+// performance. They are fixture-design labels, not clinical classifications.
+const PROFILES = [
+  {
+    code: 'AV', domain: 'articulation-phonology', group: null, outcome: 'clear',
+    goals: [
+      goal('vocalic /r/ in sentences', 'produce vocalic /r/ in structured sentences', 'clear', 'met'),
+      goal('/r/ in connected speech', 'produce /r/ during a structured speaking sample', 'modest')
+    ]
+  },
+  { code: 'BEX', domain: 'articulation-phonology', group: 'A', outcome: 'cue-dependent', goals: [goal('/s/ and /z/ in sentences', 'produce /s/ and /z/ in structured sentences', 'cue')] },
+  {
+    code: 'CY', domain: 'articulation-phonology', group: 'A', outcome: 'mixed',
+    goals: [
+      goal('initial /l/ in phrases', 'produce initial /l/ in structured phrases', 'modest'),
+      goal('final consonants in speech', 'produce final consonants in connected speech', 'plateau')
+    ]
+  },
+  { code: 'DOR', domain: 'articulation-phonology', group: 'A', outcome: 'lower-recent', goals: [goal('/sh/ in sentences', 'produce /sh/ in structured sentences', 'lower')] },
+  {
+    code: 'ELM', domain: 'articulation-phonology', group: 'B', outcome: 'mixed',
+    goals: [
+      goal('velars in structured words', 'produce velar sounds in structured words', 'clear', 'active', 0, 12, { accuracyPct: 90, consecutiveSessions: 3, cueLevel: 'minimal' }),
+      goal('velars in connected speech', 'produce velar sounds during a connected-speech sample', 'plateau', 'discontinued', 0, 10)
+    ]
+  },
+  { code: 'FEN', domain: 'articulation-phonology', group: 'B', outcome: 'modest', goals: [goal('multisyllabic words', 'produce multisyllabic words with accurate sound sequencing', 'modest')] },
+  {
+    code: 'GRA', domain: 'articulation-phonology', group: 'B', outcome: 'lower-recent',
+    goals: [
+      goal('/r/ blends in phrases', 'produce /r/ blends in structured phrases', 'lower'),
+      goal('speech-sound error identifications and repairs', 'identify and repair speech-sound errors during structured speaking', 'plateau')
+    ]
+  },
+  { code: 'HUX', domain: 'articulation-phonology', group: 'B', outcome: 'clear', goals: [goal('/th/ in sentences', 'produce /th/ in structured sentences', 'clear', 'met')] },
+  {
+    code: 'IVQ', domain: 'expressive-language', group: 'C', outcome: 'mixed',
+    goals: [
+      goal('sentences with regular past-tense verbs', 'use regular past-tense verbs in structured sentences', 'modest', 'active', 7, 12),
+      goal('complete grammatical sentences', 'form complete sentences during picture description', 'plateau', 'discontinued', 0, 5)
+    ]
+  },
+  { code: 'JET', domain: 'expressive-language', group: 'C', outcome: 'lower-recent', goals: [goal('narrative retells with ordered key events', 'retell a short narrative with key events in sequence', 'lower')] },
+  { code: 'KAL', domain: 'expressive-language', group: 'C', outcome: 'modest', goals: [goal('specific vocabulary in explanations', 'use specific vocabulary during structured explanations', 'supported')] },
+  {
+    code: 'LUM', domain: 'expressive-language', group: 'D', outcome: 'mixed',
+    goals: [
+      goal('complete grammatical sentences', 'produce complete grammatical sentences during description', 'modest'),
+      goal('narrative retells with key story elements', 'include key story elements in a short narrative retell', 'plateau')
+    ]
+  },
+  { code: 'MEP', domain: 'expressive-language', group: 'D', outcome: 'plateau', goals: [goal('category-and-feature relationship explanations', 'explain category and feature relationships using complete sentences', 'plateau')] },
+  { code: 'NIX', domain: 'receptive-language', group: 'D', outcome: 'cue-dependent', goals: [goal('accurate responses to multistep directions', 'follow multistep directions containing temporal and spatial concepts', 'cue')] },
+  {
+    code: 'ORQ', domain: 'receptive-language', group: 'E', outcome: 'modest',
+    goals: [
+      goal('accurate responses to spatial-concept directions', 'follow directions containing spatial concepts', 'modest'),
+      goal('accurate responses to temporal-concept directions', 'follow directions containing before and after concepts', 'modest')
+    ]
+  },
+  { code: 'PAV', domain: 'receptive-language', group: 'E', outcome: 'plateau', goals: [goal('accurate inference responses', 'answer inference questions from short spoken passages', 'plateau')] },
+  { code: 'QET', domain: 'receptive-language', group: 'E', outcome: 'clear', goals: [goal('accurate responses about auditory details', 'answer questions about key details from spoken directions', 'clear', 'met')] },
+  {
+    code: 'RUS', domain: 'social-pragmatic', group: 'F', outcome: 'plateau',
+    goals: [
+      goal('contingent responses', 'provide contingent responses during structured peer interaction', 'plateau'),
+      goal('shared-topic conversational turns', 'maintain a shared topic across conversational turns', 'plateau')
+    ]
+  },
+  { code: 'SIV', domain: 'social-pragmatic', group: 'F', outcome: 'clear', goals: [goal('communication repairs', 'use a taught repair strategy after a communication breakdown', 'clear', 'met')] },
+  { code: 'TOL', domain: 'social-pragmatic', group: 'F', outcome: 'clear', goals: [goal('appropriate peer-interaction entries', 'enter an ongoing structured peer interaction appropriately', 'clear', 'met')] },
+  {
+    code: 'UMB', domain: 'social-pragmatic', group: 'F', outcome: 'modest',
+    goals: [
+      goal('accurate peer-perspective identifications', 'identify a peer perspective during structured scenarios', 'approaching'),
+      goal('clarifying questions', 'ask a relevant clarifying question during shared tasks', 'emerging')
+    ]
+  },
+  { code: 'VEK', domain: 'fluency', group: 'G', outcome: 'modest', goals: [goal('speech samples using a selected fluency strategy', 'use a selected fluency strategy during structured speaking', 'late-independent')] },
+  { code: 'WIR', domain: 'fluency', group: 'G', outcome: 'plateau', goals: [goal('accurate identifications of strategy use', 'identify use of a selected fluency strategy in structured samples', 'plateau')] },
+  { code: 'XAN', domain: 'voice', group: null, outcome: 'plateau', goals: [goal('speech samples using the agreed voice strategy', 'use an agreed voice strategy during structured speaking tasks', 'plateau')] },
+  {
+    code: 'ZEP', domain: 'other', group: null, outcome: 'modest',
+    goals: [
+      goal('clarification requests', 'request clarification using an available communication modality', 'modest'),
+      goal('relevant contributions during structured exchanges', 'share one relevant piece of information during a structured exchange', 'modest')
+    ]
+  }
+]
 
-export const SAMPLE_GROUP_IDS = Object.freeze({
-  week2: `${prefix}-group-week2`,
-  week4: `${prefix}-group-week4`,
-  week6: `${prefix}-group-week6`,
-  week8: `${prefix}-group-week8`,
-  recent: `${prefix}-group-recent`
-})
+const GROUP_MEMBERS = {
+  A: ['BEX', 'CY', 'DOR'],
+  B: ['ELM', 'FEN', 'GRA', 'HUX'],
+  C: ['IVQ', 'JET', 'KAL'],
+  D: ['LUM', 'MEP', 'NIX'],
+  E: ['ORQ', 'PAV', 'QET'],
+  F: ['RUS', 'SIV', 'TOL', 'UMB'],
+  G: ['VEK', 'WIR']
+}
 
-const GOAL_IDS = Object.freeze({
-  m14r: `${prefix}-goal-m14-r`,
-  m14clusters: `${prefix}-goal-m14-clusters`,
-  k7sentences: `${prefix}-goal-k7-sentences`,
-  k7narrative: `${prefix}-goal-k7-narrative`,
-  p3directions: `${prefix}-goal-p3-directions`,
-  t9topic: `${prefix}-goal-t9-topic`
-})
+// Week 6 is the one planned service gap. Additional deterministic absences
+// vary by group; individual schedules retain all 12 possible service weeks.
+const INDIVIDUAL_WEEKS = [0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12]
+const GROUP_WEEKS = {
+  A: [0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 12],
+  B: [0, 1, 2, 3, 5, 7, 8, 9, 10, 12],
+  C: [0, 1, 3, 4, 5, 7, 8, 9, 10, 11, 12],
+  D: [0, 1, 2, 3, 4, 5, 7, 9, 10, 11, 12],
+  E: [0, 1, 2, 3, 4, 7, 8, 9, 10, 11, 12],
+  F: [0, 1, 2, 4, 5, 7, 8, 10, 11, 12],
+  G: [0, 2, 3, 4, 5, 7, 8, 9, 11, 12]
+}
+const GROUP_DAY = { A: 0, B: 1, C: 2, D: 3, E: 4, F: 1, G: 3 }
+const INDIVIDUAL_DAY = { AV: 2, XAN: 3, ZEP: 4 }
+const GROUP_DURATIONS = { A: [30, 35, 30], B: [30, 30, 35], C: [35, 30, 30], D: [30, 35, 35], E: [30, 35, 30], F: [35, 30, 35], G: [30, 35, 30] }
+const INDIVIDUAL_DURATIONS = { AV: [25, 30, 25], XAN: [30, 25, 30], ZEP: [25, 35, 30] }
+const TOTALS = [16, 18, 20, 15, 17, 19, 16, 20, 18, 17, 20, 22]
 
-const SESSION_COUNTS = Object.freeze({ m14: 9, k7: 8, p3: 7, t9: 6 })
+const ARCS = {
+  clear: [45, 52, 58, 63, 68, 73, 78, 82, 84, 86, 88],
+  modest: [50, 54, 51, 58, 57, 61, 59, 64, 62, 67, 66],
+  supported: [48, 53, 50, 57, 55, 60, 58, 63, 61, 65, 67],
+  approaching: [48, 54, 57, 62, 66, 69, 73, 76, 75, 82, 84],
+  emerging: [35, 39, 37, 42, 41, 45, 44, 48, 46, 50, 51],
+  'late-independent': [52, 55, 54, 56, 55, 58, 60, 61, 64, 66, 68],
+  plateau: [58, 61, 56, 60, 59, 62, 57, 60, 61, 58, 60],
+  lower: [65, 68, 63, 61, 60, 58, 56, 55, 57, 53, 54],
+  cue: [48, 55, 60, 66, 70, 74, 78, 82, 84, 85, 87]
+}
 
-const canonicalIds = Object.freeze({
-  clients: Object.values(SAMPLE_CLIENT_IDS),
-  goals: Object.values(GOAL_IDS),
-  sessions: Object.entries(SESSION_COUNTS).flatMap(([code, count]) =>
-    Array.from({ length: count }, (_, i) => `${prefix}-session-${code}-${String(i + 1).padStart(2, '0')}`)
-  )
+const ACTIVITIES = {
+  'articulation-phonology': ['picture naming', 'sentence practice', 'structured description', 'peer speaking game'],
+  'expressive-language': ['picture description', 'narrative retell', 'category task', 'shared explanation task'],
+  'receptive-language': ['direction-following task', 'listening passage', 'concept activity', 'barrier game'],
+  'social-pragmatic': ['peer discussion', 'cooperative game', 'structured scenario', 'shared planning task'],
+  fluency: ['structured reading', 'sentence generation', 'brief presentation', 'peer discussion'],
+  voice: ['structured reading', 'sentence practice', 'brief presentation', 'self-monitoring task'],
+  other: ['choice-making task', 'shared activity', 'information exchange', 'functional communication task']
+}
+
+const ASSESSMENT = {
+  clear: [
+    'Current performance remained below criterion and benefited from direct support.',
+    'Accuracy increased while cueing was reduced across recent samples.',
+    'Recent data met the stated accuracy and cue criteria.'
+  ],
+  modest: [
+    'Performance was variable and remained below criterion.',
+    'Recent samples showed modest change with continued variability.',
+    'Some improvement was observed, while the full criterion remained unmet.'
+  ],
+  plateau: [
+    'Current performance was comparable to other early samples.',
+    'Data remained variable without a clear upward trend.',
+    'Recent performance remained comparable to earlier samples; criterion was not met.'
+  ],
+  'lower-recent': [
+    'Current performance was variable across tasks.',
+    'Recent measured accuracy was lower than several earlier samples.',
+    'Late-term samples remained below the early-term range; no cause was inferred.'
+  ],
+  mixed: [
+    'The two measured targets showed different response patterns.',
+    'One target changed modestly while the other remained variable.',
+    'The goals ended the term with different measured outcomes.'
+  ],
+  'cue-dependent': [
+    'Accuracy increased with substantial support.',
+    'Accuracy continued to improve while moderate cueing remained necessary.',
+    'Accuracy was high in recent samples, but cueing remained above the target criterion.'
+  ]
+}
+
+const PLAN = {
+  clear: [
+    'Continue the current target and collect additional supported samples.',
+    'Continue the target while testing reduced support across structured tasks.',
+    'Collect periodic maintenance samples for the met target.'
+  ],
+  modest: 'Continue the current target and collect additional data across varied structured tasks.',
+  plateau: 'Continue data collection and review task and support selection using clinician judgment.',
+  'lower-recent': 'Continue data collection and review task demands and supports without attributing a cause.',
+  mixed: 'Continue both measured targets at their current support levels and review the patterns separately.',
+  'cue-dependent': 'Continue the target while systematically testing whether cues can be reduced.'
+}
+
+const STANDOUT = {
+  clear: ['Used a visual reminder before responding', 'Paused to check one response', 'Corrected one response after a brief pause'],
+  modest: ['Stayed with the task after an incorrect response', 'Requested one repetition', 'Used the provided visual organizer'],
+  plateau: ['Performance varied across repeated items', 'Used the same support across easier and harder items', 'Completed the task with the planned supports'],
+  'lower-recent': ['Requested a repetition during the final activity', 'Needed the planned model before several responses', 'Completed the activity despite variable responses'],
+  mixed: ['Responded differently across the two target activities', 'Used a visual support for one target but not the other', 'Asked to review one direction before continuing'],
+  'cue-dependent': ['Reached high accuracy after a verbal model', 'Waited for the visual cue before several responses', 'Completed the final items with moderate support']
+}
+
+export const SAMPLE_CLIENT_IDS = Object.freeze(
+  Object.fromEntries(PROFILES.map((profile) => [profile.code.toLowerCase(), `${prefix}-client-${profile.code.toLowerCase()}`]))
+)
+
+const groupId = (group, week) => `${prefix}-group-${group.toLowerCase()}-${String(week).padStart(2, '0')}`
+const sessionId = (code, week) => `${prefix}-session-${code.toLowerCase()}-${String(week).padStart(2, '0')}`
+
+export const SAMPLE_GROUP_IDS = Object.freeze({ recent: groupId('F', 12) })
+export const DEMO_GUIDE_TARGETS = Object.freeze({
+  clientId: SAMPLE_CLIENT_IDS.cy,
+  progressClientId: SAMPLE_CLIENT_IDS.mep,
+  draftSessionId: sessionId('NIX', 12),
+  noteSessionId: sessionId('AV', 12),
+  groupId: SAMPLE_GROUP_IDS.recent
 })
 
 function marker() {
   return { sample: true, sampleDataset: SAMPLE_DATASET_ID }
 }
 
-export function sampleProvenance(record) {
-  return isSampleRecord(record)
-    ? { sample: true, sampleDataset: SAMPLE_DATASET_ID }
-    : {}
-}
-
 export function isSampleRecord(record) {
   return record?.sample === true && record?.sampleDataset === SAMPLE_DATASET_ID
 }
 
-export function sampleDatasetState({ clients = [], goals = [], sessions = [] } = {}) {
-  const tables = { clients, goals, sessions }
-  const present = Object.values(tables).flat().filter((record) => isSampleRecord(record))
-  if (!present.length) return 'absent'
-  const complete = Object.entries(canonicalIds).every(([table, ids]) => {
-    const have = new Set(tables[table].filter((record) => isSampleRecord(record)).map((r) => r.id))
-    return ids.every((id) => have.has(id))
-  })
-  return complete ? 'complete' : 'partial'
+export function sampleProvenance(record) {
+  return isSampleRecord(record) ? marker() : {}
 }
 
-function shiftISO(iso, days) {
-  const [year, month, day] = iso.split('-').map(Number)
-  const date = new Date(Date.UTC(year, month - 1, day + days, 12))
+function validISO(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value ?? '')) return false
+  const date = new Date(`${value}T12:00:00Z`)
+  return !Number.isNaN(date.valueOf()) && date.toISOString().slice(0, 10) === value
+}
+
+function addDays(iso, days) {
+  const date = new Date(`${iso}T12:00:00Z`)
+  date.setUTCDate(date.getUTCDate() + days)
   return date.toISOString().slice(0, 10)
 }
 
-function timestampFor(iso, minute = 0) {
-  const [year, month, day] = iso.split('-').map(Number)
-  return Date.UTC(year, month - 1, day, 12, minute)
+function timestamp(iso, minute = 0) {
+  return new Date(`${iso}T12:${String(minute).padStart(2, '0')}:00Z`).valueOf()
 }
 
-function goalData(goalId, data) {
-  return {
-    goalId,
-    trials:
-      data.correct == null || data.total == null
-        ? null
-        : { correct: data.correct, total: data.total },
-    cueLevel: data.cueLevel,
-    cueTypes: data.cueTypes ?? [],
-    observations: data.observations ?? [],
-    activity: data.activity ?? '',
-    notes: data.notes ?? ''
+export function winterTerm(anchorDate) {
+  if (!validISO(anchorDate)) throw new Error('A valid anchor date in YYYY-MM-DD format is required.')
+  const anchorYear = Number(anchorDate.slice(0, 4))
+  const completedThisYear = anchorDate >= `${anchorYear}-04-04`
+  const year = completedThisYear ? anchorYear : anchorYear - 1
+  const jan5 = `${year}-01-05`
+  const day = new Date(`${jan5}T12:00:00Z`).getUTCDay()
+  const monday = addDays(jan5, (8 - day) % 7)
+  return { year, start: monday, end: addDays(monday, 12 * 7 + 4) }
+}
+
+function goalId(code, index) {
+  return `${prefix}-goal-${code.toLowerCase()}-${index + 1}`
+}
+
+function serviceWeeksFor(profile) {
+  return profile.group ? GROUP_WEEKS[profile.group] : INDIVIDUAL_WEEKS
+}
+
+function cueFor(arc, position, length) {
+  if (arc === 'cue') return position < 2 ? 'maximal' : 'moderate'
+  if (arc === 'clear') return position < 3 ? 'moderate' : 'minimal'
+  if (arc === 'modest' || arc === 'approaching') return position < Math.ceil(length / 2) ? 'moderate' : 'minimal'
+  if (arc === 'late-independent') {
+    if (position >= length - 3) return 'independent'
+    return position < 4 ? 'moderate' : 'minimal'
   }
+  return 'moderate'
 }
 
-const CLIENTS = [
-  ['m14', 'M14', 'Fictional sample client: compare early and recent articulation sessions.'],
-  ['k7', 'K7', 'Fictional sample client: two language goals with different trajectories.'],
-  ['p3', 'P3', 'Fictional sample client: accuracy improves before cue dependence resolves.'],
-  ['t9', 'T9', 'Fictional sample client: performance varies across social contexts.']
-]
+function cueTypes(domain, cueLevel, position, observations, standout) {
+  if (cueLevel === 'independent') return []
+  const types = [domain === 'articulation-phonology' ? 'verbal' : 'visual']
+  types.push(domain === 'other' ? 'model' : position % 2 ? 'verbal' : 'visual')
+  if (observations.includes('model') || /\bmodel\b/i.test(standout)) types.push('model')
+  if (/\bvisual\b/i.test(standout)) types.push('visual')
+  if (/\bverbal\b/i.test(standout)) types.push('verbal')
+  return [...new Set(types)]
+}
 
-const GOALS = [
-  {
-    id: GOAL_IDS.m14r,
-    client: 'm14',
-    domain: 'articulation-phonology',
-    text: 'Will produce vocalic /r/ in structured sentences with 80% accuracy given minimal cues across 3 consecutive sessions.',
-    shortLabel: 'vocalic /r/ in sentences',
-    baseline: '42% in structured words with moderate cues',
-    targetCriterion: { accuracyPct: 80, consecutiveSessions: 3, cueLevel: 'minimal' }
-  },
-  {
-    id: GOAL_IDS.m14clusters,
-    client: 'm14',
-    domain: 'articulation-phonology',
-    text: 'Will produce consonant clusters in connected speech with 80% accuracy given minimal cues across 3 consecutive sessions.',
-    shortLabel: 'clusters in connected speech',
-    baseline: '60% in structured phrases with moderate cues',
-    targetCriterion: { accuracyPct: 80, consecutiveSessions: 3, cueLevel: 'minimal' }
-  },
-  {
-    id: GOAL_IDS.k7sentences,
-    client: 'k7',
-    domain: 'expressive-language',
-    text: 'Will produce complete, grammatically accurate sentences during structured description with 80% accuracy given minimal cues across 3 consecutive sessions.',
-    shortLabel: 'complete sentences',
-    baseline: '45% with moderate models and visual supports',
-    targetCriterion: { accuracyPct: 80, consecutiveSessions: 3, cueLevel: 'minimal' }
-  },
-  {
-    id: GOAL_IDS.k7narrative,
-    client: 'k7',
-    domain: 'expressive-language',
-    text: 'Will retell a short narrative with key story elements in sequence with 80% accuracy given minimal cues across 3 consecutive sessions.',
-    shortLabel: 'narrative sequence',
-    baseline: '40% with maximal verbal and visual support',
-    targetCriterion: { accuracyPct: 80, consecutiveSessions: 3, cueLevel: 'minimal' }
-  },
-  {
-    id: GOAL_IDS.p3directions,
-    client: 'p3',
-    domain: 'receptive-language',
-    text: 'Will follow multistep directions containing temporal and spatial concepts with 80% accuracy given minimal cues across 3 consecutive sessions.',
-    shortLabel: 'multistep directions',
-    baseline: '50% with moderate repetition and visual supports',
-    targetCriterion: { accuracyPct: 80, consecutiveSessions: 3, cueLevel: 'minimal' }
-  },
-  {
-    id: GOAL_IDS.t9topic,
-    client: 't9',
-    domain: 'social-pragmatic',
-    text: 'Will maintain a shared topic and provide contingent responses during peer interaction with 80% accuracy given minimal cues across 3 consecutive sessions.',
-    shortLabel: 'contingent peer responses',
-    baseline: '50% during structured peer activities with moderate cues',
-    targetCriterion: { accuracyPct: 80, consecutiveSessions: 3, cueLevel: 'minimal' }
+function observationFor(profile, spec, position, length) {
+  if (profile.code === 'GRA' && spec.arc === 'plateau') {
+    return position >= Math.ceil(length / 2) && position % 2 === 0 ? ['self-correct'] : []
   }
-]
-
-const GROUPS = {
-  week2: { offset: -56, durationMin: 30 },
-  week4: { offset: -42, durationMin: 30 },
-  week6: { offset: -28, durationMin: 30 },
-  week8: { offset: -14, durationMin: 30 },
-  recent: { offset: -7, durationMin: 30 }
+  if (spec.arc === 'clear' && position >= 6 && position % 2 === 0) return ['self-correct']
+  if ((spec.arc === 'cue' || spec.arc === 'lower') && position % 3 === 0) return ['model']
+  if (spec.arc === 'supported' && position % 2 === 0) return ['visual']
+  return position % 3 === 0 ? ['visual'] : []
 }
 
-const SCENARIOS = {
-  m14: [
-    {
-      offset: -70,
-      S: 'Transitioned readily and participated throughout structured practice.',
-      A: 'Vocalic /r/ was emerging in structured words; cluster accuracy was stronger with direct models.',
-      P: 'Continue word-to-sentence practice with moderate verbal and visual cues.',
-      standout: 'Used the mirror to adjust tongue placement after a visual reminder',
-      data: [
-        [GOAL_IDS.m14r, 8, 19, 'moderate', ['verbal', 'visual'], 'vocalic /r/ picture cards', ['visual']],
-        [GOAL_IDS.m14clusters, 12, 20, 'moderate', ['verbal', 'model'], 'cluster picture cards', ['model']]
-      ]
-    },
-    {
-      offset: -63,
-      S: 'Arrived ready to work and sustained attention with one brief reminder.',
-      A: 'Accuracy increased for both targets while moderate cueing remained necessary.',
-      P: 'Continue short phrases and introduce a small set of sentence frames.',
-      standout: 'Produced two unpracticed /r/ words accurately after reviewing the visual cue',
-      data: [
-        [GOAL_IDS.m14r, 10, 20, 'moderate', ['verbal', 'visual'], 'target words in short phrases'],
-        [GOAL_IDS.m14clusters, 13, 19, 'moderate', ['verbal', 'model'], 'cluster phrases']
-      ]
-    },
-    {
-      group: 'week2',
-      S: 'Participated cooperatively in the group and waited for turns.',
-      A: 'Sentence-level /r/ accuracy improved; clusters were more stable in rehearsed responses.',
-      P: 'Continue sentence generation and cue for self-monitoring before each response.',
-      standout: 'Paused before one response and checked tongue placement without being told',
-      data: [
-        [GOAL_IDS.m14r, 11, 19, 'moderate', ['verbal', 'visual'], 'peer sentence-generation game'],
-        [GOAL_IDS.m14clusters, 14, 20, 'moderate', ['verbal'], 'peer description game', ['initiated']]
-      ]
-    },
-    {
-      offset: -49,
-      S: 'Engaged with an unfamiliar task and requested clarification appropriately.',
-      A: 'Accuracy decreased as sentence length and novelty increased; productions improved after visual review.',
-      P: 'Return briefly to familiar sentence frames, then vary one element at a time.',
-      standout: 'Persisted with the unfamiliar picture task despite several difficult productions',
-      data: [
-        [GOAL_IDS.m14r, 9, 19, 'moderate', ['verbal', 'visual'], 'unfamiliar picture description', ['visual']],
-        [GOAL_IDS.m14clusters, 13, 18, 'minimal', ['verbal'], 'unfamiliar picture description']
-      ]
-    },
-    {
-      offset: -35,
-      S: 'Transitioned willingly and responded well to the familiar routine.',
-      A: 'Vocalic /r/ rebounded with familiar sentence frames, and both targets required less support.',
-      P: 'Continue minimal cues and mix familiar with novel sentence prompts.',
-      standout: 'Corrected one distorted /r/ after a pause without a clinician model',
-      data: [
-        [GOAL_IDS.m14r, 12, 19, 'minimal', ['visual'], 'familiar sentence frames', ['self-correct']],
-        [GOAL_IDS.m14clusters, 15, 20, 'minimal', ['verbal'], 'structured sentence practice']
-      ]
-    },
-    {
-      group: 'week6',
-      S: 'Participated consistently and responded positively to peer turns.',
-      A: 'Both targets improved with minimal cues during mixed sentence practice.',
-      P: 'Maintain minimal cueing and begin brief connected-speech probes.',
-      standout: 'Used a quiet rehearsal before answering during the group activity',
-      data: [
-        [GOAL_IDS.m14r, 15, 21, 'minimal', ['verbal'], 'mixed sentence practice'],
-        [GOAL_IDS.m14clusters, 16, 20, 'minimal', ['verbal'], 'collaborative barrier game']
-      ]
-    },
-    {
-      offset: -21,
-      S: 'Arrived focused and completed the structured reading task independently.',
-      A: 'Vocalic /r/ reached criterion accuracy for the first session; cluster performance varied in connected text.',
-      P: 'Continue structured reading and monitor whether target accuracy holds across settings.',
-      standout: 'Self-corrected an /r/ production in the reading passage before continuing',
-      data: [
-        [GOAL_IDS.m14r, 16, 20, 'minimal', ['visual'], 'structured reading passage', ['self-correct']],
-        [GOAL_IDS.m14clusters, 15, 19, 'minimal', ['verbal'], 'structured reading passage']
-      ]
-    },
-    {
-      offset: -14,
-      S: 'Maintained effort during picture description and accepted reduced cueing.',
-      A: 'Vocalic /r/ remained above criterion and cluster accuracy recovered with minimal support.',
-      P: 'Continue less predictable description tasks and fade visual reminders.',
-      standout: 'Used the visual cue independently before beginning a longer response',
-      data: [
-        [GOAL_IDS.m14r, 15, 18, 'minimal', ['visual'], 'picture description', ['initiated']],
-        [GOAL_IDS.m14clusters, 17, 20, 'minimal', ['verbal'], 'picture description']
-      ]
-    },
-    {
-      group: 'recent',
-      S: 'Participated throughout the group and used peer wait time productively.',
-      A: 'Vocalic /r/ met the accuracy-and-cue criterion across three sessions; clusters are approaching criterion.',
-      P: 'Probe vocalic /r/ in less structured conversation and continue cluster carryover practice.',
-      standout: 'Corrected a distorted /r/ in an unpracticed word without prompting',
-      data: [
-        [GOAL_IDS.m14r, 17, 20, 'minimal', ['visual'], 'mixed group description tasks', ['self-correct']],
-        [GOAL_IDS.m14clusters, 17, 21, 'minimal', ['verbal'], 'mixed group description tasks', ['self-correct']]
-      ]
-    }
-  ],
-  k7: [
-    {
-      offset: -70,
-      S: 'Required a brief warm-up, then participated in all language activities.',
-      A: 'Complete sentences and narrative sequence both required frequent models and visual structure.',
-      P: 'Continue sentence frames and explicitly teach a simple story-element organizer.',
-      standout: 'Added a subject to a sentence after comparing it with the visual frame',
-      data: [
-        [GOAL_IDS.k7sentences, 9, 20, 'moderate', ['verbal', 'visual', 'model'], 'single-picture description', ['model']],
-        [GOAL_IDS.k7narrative, 4, 10, 'maximal', ['verbal', 'visual', 'model'], 'three-part picture sequence', ['visual']]
-      ]
-    },
-    {
-      offset: -63,
-      S: 'Transitioned readily and remained engaged with visual materials.',
-      A: 'Sentence completeness improved slightly; narrative retells still depended on direct sequencing support.',
-      P: 'Continue visual sentence frames and practice first-next-last organization.',
-      standout: 'Used first and next accurately after pointing to the organizer',
-      data: [
-        [GOAL_IDS.k7sentences, 10, 20, 'moderate', ['verbal', 'visual'], 'single-picture description'],
-        [GOAL_IDS.k7narrative, 5, 10, 'moderate', ['verbal', 'visual'], 'first-next-last retell', ['visual']]
-      ]
-    },
-    {
-      group: 'week2',
-      S: 'Participated cooperatively and listened to peer responses.',
-      A: 'Sentence formulation improved in the shared activity; narrative details remained limited without visual prompts.',
-      P: 'Continue peer description tasks and prompt for one additional story element.',
-      standout: 'Expanded a peer response by adding where the event occurred',
-      data: [
-        [GOAL_IDS.k7sentences, 12, 20, 'moderate', ['verbal', 'visual'], 'peer sentence-generation game', ['initiated']],
-        [GOAL_IDS.k7narrative, 6, 10, 'moderate', ['verbal', 'visual'], 'shared picture-sequence retell', ['visual']]
-      ]
-    },
-    {
-      group: 'week4',
-      S: 'Engaged in the group but needed redirection during longer peer turns.',
-      A: 'Sentence accuracy continued to increase; narrative sequence was less consistent when attention shifted.',
-      P: 'Use shorter narrative segments and maintain the visual organizer during peer turns.',
-      standout: 'Returned to the correct story step after checking the organizer',
-      data: [
-        [GOAL_IDS.k7sentences, 13, 20, 'moderate', ['verbal'], 'collaborative scene description'],
-        [GOAL_IDS.k7narrative, 5, 10, 'moderate', ['verbal', 'visual'], 'peer story retell', ['redirection', 'visual']]
-      ]
-    },
-    {
-      offset: -35,
-      S: 'Arrived ready to work and used the visual routine independently.',
-      A: 'Sentence formulation improved with minimal support, while narrative organization continued to require moderate visual cues.',
-      P: 'Fade sentence frames and retain the story organizer for narrative tasks.',
-      standout: 'Produced a complete sentence before the visual frame was presented',
-      data: [
-        [GOAL_IDS.k7sentences, 14, 20, 'minimal', ['visual'], 'themed picture description', ['initiated']],
-        [GOAL_IDS.k7narrative, 7, 10, 'moderate', ['visual'], 'four-part picture sequence', ['visual']]
-      ]
-    },
-    {
-      group: 'week6',
-      S: 'Participated actively and asked a peer one relevant question.',
-      A: 'Complete sentences reached criterion accuracy with minimal cues; narrative content improved but remained cue-dependent.',
-      P: 'Practice sentence carryover in conversation and continue visual narrative supports.',
-      standout: 'Added a missing problem element to the group story without a direct prompt',
-      data: [
-        [GOAL_IDS.k7sentences, 16, 20, 'minimal', ['verbal'], 'collaborative barrier game'],
-        [GOAL_IDS.k7narrative, 7, 10, 'minimal', ['visual'], 'collaborative story retell', ['initiated']]
-      ]
-    },
-    {
-      offset: -14,
-      S: 'Sustained attention and completed both language tasks with minimal redirection.',
-      A: 'Sentence accuracy remained above criterion; narrative sequencing reached criterion once with visual support.',
-      P: 'Continue narrative retells with less predictable stories and fade organizer prompts gradually.',
-      standout: 'Noticed and supplied a missing ending after reviewing the sequence',
-      data: [
-        [GOAL_IDS.k7sentences, 17, 20, 'minimal', ['verbal'], 'unfamiliar scene description'],
-        [GOAL_IDS.k7narrative, 8, 10, 'minimal', ['visual'], 'unfamiliar short narrative', ['self-correct']]
-      ]
-    },
-    {
-      group: 'recent',
-      S: 'Participated consistently and responded to peer ideas throughout the group.',
-      A: 'Complete sentences met criterion with reduced support; narrative organization remained variable in a less structured task.',
-      P: 'Shift sentence work toward conversation and continue targeting independent narrative organization.',
-      standout: 'Produced several complete responses in peer conversation without the sentence frame',
-      data: [
-        [GOAL_IDS.k7sentences, 18, 21, 'independent', [], 'peer planning discussion', ['generalized']],
-        [GOAL_IDS.k7narrative, 7, 10, 'minimal', ['visual'], 'less structured group retell', ['visual']]
-      ]
-    }
-  ],
-  p3: [
-    {
-      offset: -63,
-      S: 'Transitioned willingly and attended to the structured direction task.',
-      A: 'Multistep directions required repetition and visual support at baseline.',
-      P: 'Continue two-step directions with explicit temporal concepts and visuals.',
-      standout: 'Checked the visual sequence before beginning a two-step direction',
-      data: [[GOAL_IDS.p3directions, 10, 20, 'moderate', ['verbal', 'visual'], 'two-step object directions', ['visual']]]
-    },
-    {
-      group: 'week2',
-      S: 'Participated cooperatively and watched peer demonstrations.',
-      A: 'Accuracy improved with repeated directions and visual sequencing cues.',
-      P: 'Continue temporal concepts and reduce repetitions when the visual is available.',
-      standout: 'Completed an after-before direction after one visual review',
-      data: [[GOAL_IDS.p3directions, 12, 20, 'moderate', ['verbal', 'visual'], 'group movement directions', ['visual']]]
-    },
-    {
-      offset: -49,
-      S: 'Arrived focused and requested one repetition appropriately.',
-      A: 'Accuracy continued to improve, though moderate verbal support remained necessary.',
-      P: 'Maintain concept variety and pause before offering repetition.',
-      standout: 'Repeated the direction quietly before completing each step',
-      data: [[GOAL_IDS.p3directions, 14, 20, 'moderate', ['verbal', 'visual'], 'classroom-material directions', ['initiated']]]
-    },
-    {
-      offset: -35,
-      S: 'Engaged throughout a familiar direction-following routine.',
-      A: 'Accuracy exceeded target in a familiar task, but performance still required moderate cueing.',
-      P: 'Keep the accuracy demand while fading repetition toward minimal support.',
-      standout: 'Completed several three-step directions accurately after verbal repetition',
-      data: [[GOAL_IDS.p3directions, 17, 20, 'moderate', ['verbal'], 'familiar three-step routine']]
-    },
-    {
-      offset: -21,
-      S: 'Participated readily and tolerated delayed cueing.',
-      A: 'High accuracy was maintained, but cue dependence remained above the goal criterion.',
-      P: 'Delay verbal support and encourage one independent rehearsal before acting.',
-      standout: 'Waited through the cueing delay and initiated the first step independently',
-      data: [[GOAL_IDS.p3directions, 18, 20, 'moderate', ['verbal'], 'temporal-concept directions', ['initiated']]]
-    },
-    {
-      group: 'week8',
-      S: 'Participated throughout the group and followed the visual routine.',
-      A: 'Target accuracy was maintained as cueing decreased to minimal for the first session.',
-      P: 'Continue minimal cues across varied group directions before considering criterion met.',
-      standout: 'Completed a multistep peer direction after one brief visual cue',
-      data: [[GOAL_IDS.p3directions, 16, 20, 'minimal', ['visual'], 'peer-directed barrier task', ['visual']]]
-    },
-    {
-      group: 'recent',
-      S: 'Remained engaged during a busy group activity with one brief redirection.',
-      A: 'Accuracy remained above target with minimal cues for a second session; independence is emerging but criterion is not yet met.',
-      P: 'Continue varied multistep directions with minimal cues and monitor the next consecutive data point.',
-      standout: 'Asked for clarification before beginning rather than waiting for a repeated direction',
-      data: [[GOAL_IDS.p3directions, 17, 21, 'minimal', ['visual'], 'mixed group directions', ['initiated']]]
-    }
-  ],
-  t9: [
-    {
-      offset: -49,
-      S: 'Engaged with the structured conversation map and completed all turns.',
-      A: 'Contingent responses were emerging with moderate visual and verbal supports.',
-      P: 'Continue structured turn-taking with a visible topic map.',
-      standout: 'Asked one related follow-up question after checking the topic map',
-      data: [[GOAL_IDS.t9topic, 8, 16, 'moderate', ['verbal', 'visual'], 'structured conversation map', ['visual']]]
-    },
-    {
-      group: 'week4',
-      S: 'Participated in the small group and responded positively to clear turn cues.',
-      A: 'Contingent responses improved during a predictable peer game with moderate cues.',
-      P: 'Continue predictable peer routines and fade explicit turn reminders.',
-      standout: 'Responded directly to a peer comment before introducing a new idea',
-      data: [[GOAL_IDS.t9topic, 12, 20, 'moderate', ['verbal', 'visual'], 'predictable peer question game', ['initiated']]]
-    },
-    {
-      group: 'week6',
-      S: 'Participated throughout but shifted topics during open-ended turns.',
-      A: 'Performance decreased when the group activity became less structured.',
-      P: 'Use a brief topic cue during open-ended discussion and practice two-turn exchanges.',
-      standout: 'Returned to the shared topic after a peer restated the question',
-      data: [[GOAL_IDS.t9topic, 9, 18, 'moderate', ['verbal', 'visual'], 'open-ended group discussion', ['visual']]]
-    },
-    {
-      group: 'week8',
-      S: 'Engaged consistently and used the group plan to track the shared topic.',
-      A: 'Contingent responses improved with minimal visual cueing in a structured peer task.',
-      P: 'Continue minimal visual cues and vary peer partners and topics.',
-      standout: 'Maintained the topic across three peer turns with one visual reminder',
-      data: [[GOAL_IDS.t9topic, 14, 20, 'minimal', ['visual'], 'structured peer planning task', ['initiated']]]
-    },
-    {
-      group: 'recent',
-      S: 'Participated willingly; environmental noise affected several peer exchanges.',
-      A: 'Performance varied in the busier setting despite minimal cues, indicating continued need for contextual practice.',
-      P: 'Practice brief peer exchanges across settings and keep visual support available as needed.',
-      standout: 'Recovered the shared topic after noticing that a peer looked confused',
-      data: [[GOAL_IDS.t9topic, 10, 18, 'minimal', ['visual'], 'less structured group planning', ['environment', 'self-correct']]]
-    },
-    {
-      offset: 0,
-      status: 'draft',
-      S: 'Transitioned readily and began a new peer-interview activity.',
-      A: '',
-      P: '',
-      standout: '',
-      data: [[GOAL_IDS.t9topic, 5, 8, 'minimal', ['visual'], 'peer interview warm-up', []]]
-    }
+function phase(position, length) {
+  if (position < Math.ceil(length / 3)) return 0
+  if (position < Math.ceil((length * 2) / 3)) return 1
+  return 2
+}
+
+function pctFor(arc, position, length) {
+  const source = ARCS[arc]
+  const index = length <= 1 ? source.length - 1 : Math.round((position * (source.length - 1)) / (length - 1))
+  return source[index]
+}
+
+function criterionFor(spec) {
+  if (spec.criterion) return spec.criterion
+  if (spec.arc === 'plateau' || spec.arc === 'lower') {
+    return { accuracyPct: 75, consecutiveSessions: 2, cueLevel: 'minimal' }
+  }
+  return { accuracyPct: 80, consecutiveSessions: 3, cueLevel: 'minimal' }
+}
+
+function sessionSubject(setting, position) {
+  const group = [
+    'Participated in the scheduled group and completed the planned activities.',
+    'Transitioned to the group and took part in each structured task.',
+    'Participated in the peer activities with the planned supports.'
   ]
+  const individual = [
+    'Transitioned to the individual session and completed the planned activities.',
+    'Participated throughout the individual session with the planned supports.',
+    'Completed the structured individual activities.'
+  ]
+  const list = setting === 'group' ? group : individual
+  return list[position % list.length]
 }
 
-function makeSession(clientKey, client, clientGoals, scenario, index, anchorDate) {
-  const group = scenario.group ? GROUPS[scenario.group] : null
-  const date = shiftISO(anchorDate, group?.offset ?? scenario.offset)
-  const data = scenario.data.map(([goalId, correct, total, cueLevel, cueTypes, activity, observations]) =>
-    goalData(goalId, { correct, total, cueLevel, cueTypes, activity, observations })
-  )
-  const standout = scenario.standout ?? ''
-  const objective = generateO(client.code, clientGoals, data, '', standout)
-  return {
-    id: `${prefix}-session-${clientKey}-${String(index + 1).padStart(2, '0')}`,
-    clientId: client.id,
-    groupId: scenario.group ? SAMPLE_GROUP_IDS[scenario.group] : null,
-    date,
-    durationMin: group?.durationMin ?? scenario.durationMin ?? 30,
-    setting: scenario.group ? 'group' : scenario.setting ?? 'individual',
-    soap: { S: scenario.S, O: objective, A: scenario.A, P: scenario.P },
-    oEdited: false,
-    observations: '',
-    standout,
-    goalData: data,
-    status: scenario.status ?? 'final',
-    createdAt: timestampFor(date, index),
-    ...marker()
+function standoutFor(profile, position, length) {
+  if (profile.code === 'GRA') {
+    if (position < Math.ceil(length / 3)) return 'Used a visual reminder before checking a response'
+    if (position < Math.ceil((length * 2) / 3)) return 'Paused to check one production before continuing'
+    return 'Self-corrected one production before feedback'
   }
+  if (profile.code === 'KAL') return 'Used the visual organizer before several explanations'
+  if (profile.code === 'VEK' && position >= length - 3) return 'Selected and used the strategy independently in the final speaking sample'
+  if (profile.code === 'ZEP') {
+    if (position < Math.ceil(length / 3)) return 'Selected a picture response during the structured exchange'
+    if (position < Math.ceil((length * 2) / 3)) return 'Combined a picture response with a gesture'
+    return 'Used gesture and a spoken response across two activities'
+  }
+  const list = STANDOUT[profile.outcome]
+  return list[(position + PROFILES.indexOf(profile)) % list.length]
 }
 
-export function buildSampleDataset({ anchorDate }) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(anchorDate ?? '')) {
-    throw new Error('Sample dataset requires an anchor date in YYYY-MM-DD format')
+function assessmentFor(profile, p, activeSpecs) {
+  if (profile.outcome === 'mixed' && activeSpecs.length < 2) {
+    const arc = activeSpecs[0]?.arc
+    if (arc === 'plateau') return ASSESSMENT.plateau[p]
+    if (arc === 'lower') return ASSESSMENT['lower-recent'][p]
+    if (arc === 'clear') return ASSESSMENT.clear[p]
+    return ASSESSMENT.modest[p]
   }
+  return ASSESSMENT[profile.outcome][p]
+}
 
-  const createdDate = shiftISO(anchorDate, -84)
-  const clients = CLIENTS.map(([key, code, notes], index) => ({
-    id: SAMPLE_CLIENT_IDS[key],
-    code,
-    notes,
+function planFor(profile, p, activeSpecs) {
+  if (profile.outcome === 'clear') {
+    if (p < 2) return PLAN.clear[p]
+    const hasMet = activeSpecs.some((spec) => spec.status === 'met')
+    const hasActive = activeSpecs.some((spec) => spec.status === 'active')
+    if (hasMet && hasActive) return 'Collect maintenance samples for the met target and continue the remaining active target.'
+    return PLAN.clear[2]
+  }
+  if (profile.outcome === 'mixed' && activeSpecs.length < 2) {
+    const arc = activeSpecs[0]?.arc
+    if (arc === 'plateau') return PLAN.plateau
+    if (arc === 'lower') return PLAN['lower-recent']
+    return PLAN.modest
+  }
+  return PLAN[profile.outcome]
+}
+
+function durationFor(profile, serviceIndex) {
+  const choices = profile.group ? GROUP_DURATIONS[profile.group] : INDIVIDUAL_DURATIONS[profile.code]
+  return choices[serviceIndex % choices.length]
+}
+
+function activeWeeksFor(spec, serviceWeeks) {
+  return serviceWeeks.filter((week) => week >= spec.startWeek && week <= spec.endWeek)
+}
+
+export function buildSampleDataset({ anchorDate } = {}) {
+  const term = winterTerm(anchorDate)
+  const clients = PROFILES.map((profile, index) => ({
+    id: SAMPLE_CLIENT_IDS[profile.code.toLowerCase()],
+    code: profile.code,
+    notes: profile.group
+      ? 'Fictional demo record. Seen in a recurring small group; review accuracy together with cue level and task context.'
+      : 'Fictional demo record. Seen individually; review accuracy together with cue level and task context.',
     archived: false,
-    createdAt: timestampFor(createdDate, index),
+    demoOutcome: profile.outcome,
+    createdAt: timestamp(term.start, index),
     ...marker()
   }))
 
-  const goals = GOALS.map((goal, index) => ({
-    id: goal.id,
-    clientId: SAMPLE_CLIENT_IDS[goal.client],
-    domain: goal.domain,
-    text: goal.text,
-    shortLabel: goal.shortLabel,
-    targetCriterion: goal.targetCriterion,
-    baseline: goal.baseline,
-    status: 'active',
-    createdAt: timestampFor(createdDate, index + 10),
-    ...marker()
-  }))
-
-  const sessions = []
-  for (const [clientKey, scenarios] of Object.entries(SCENARIOS)) {
-    const client = clients.find((record) => record.id === SAMPLE_CLIENT_IDS[clientKey])
-    const clientGoals = goals.filter((goal) => goal.clientId === client.id)
-    scenarios.forEach((scenario, index) => {
-      sessions.push(makeSession(clientKey, client, clientGoals, scenario, index, anchorDate))
+  const goals = PROFILES.flatMap((profile, profileIndex) =>
+    profile.goals.map((spec, index) => {
+      const criterion = criterionFor(spec)
+      return {
+        id: goalId(profile.code, index),
+        clientId: SAMPLE_CLIENT_IDS[profile.code.toLowerCase()],
+        domain: profile.domain,
+        text: `Will ${spec.target} with ${criterion.accuracyPct}% accuracy given ${criterion.cueLevel} cues across ${criterion.consecutiveSessions} consecutive sessions.`,
+        shortLabel: spec.label,
+        targetCriterion: criterion,
+        baseline: `${ARCS[spec.arc][0]}% with ${spec.arc === 'cue' ? 'maximal' : 'moderate'} cues in structured tasks`,
+        status: spec.status,
+        demoArc: spec.arc,
+        createdAt: timestamp(term.start, profileIndex + index),
+        ...marker()
+      }
     })
+  )
+
+  const goalMap = new Map(goals.map((record) => [record.id, record]))
+  const sessions = []
+
+  for (const [profileIndex, profile] of PROFILES.entries()) {
+    const clientId = SAMPLE_CLIENT_IDS[profile.code.toLowerCase()]
+    const serviceWeeks = serviceWeeksFor(profile)
+    const clientGoals = profile.goals.map((spec, index) => ({ spec, goal: goalMap.get(goalId(profile.code, index)) }))
+    for (const [serviceIndex, week] of serviceWeeks.entries()) {
+      const dayOffset = profile.group ? GROUP_DAY[profile.group] : INDIVIDUAL_DAY[profile.code]
+      const date = addDays(term.start, week * 7 + dayOffset)
+      const setting = profile.group ? 'group' : 'individual'
+      const activePairs = clientGoals.filter(({ spec }) => week >= spec.startWeek && week <= spec.endWeek)
+      const p = phase(serviceIndex, serviceWeeks.length)
+      const standout = standoutFor(profile, serviceIndex, serviceWeeks.length)
+      const goalData = activePairs.map(({ spec, goal: record }, goalIndex) => {
+        const activeWeeks = activeWeeksFor(spec, serviceWeeks)
+        const position = activeWeeks.indexOf(week)
+        const targetPct = pctFor(spec.arc, position, activeWeeks.length)
+        const total = TOTALS[(serviceIndex + goalIndex + profileIndex) % TOTALS.length]
+        const correct = Math.max(0, Math.min(total, Math.round((targetPct / 100) * total)))
+        const cueLevel = cueFor(spec.arc, position, activeWeeks.length)
+        const observations = observationFor(profile, spec, position, activeWeeks.length)
+        return {
+          goalId: record.id,
+          trials: { correct, total },
+          cueLevel,
+          cueTypes: cueTypes(profile.domain, cueLevel, position, observations, standout),
+          observations,
+          activity: ACTIVITIES[profile.domain][(serviceIndex + goalIndex) % ACTIVITIES[profile.domain].length],
+          notes: ''
+        }
+      })
+
+      const activeSpecs = activePairs.map(({ spec }) => spec)
+      const session = {
+        id: sessionId(profile.code, week),
+        clientId,
+        ...(profile.group ? { groupId: groupId(profile.group, week) } : {}),
+        date,
+        durationMin: durationFor(profile, serviceIndex),
+        setting,
+        status: ['NIX', 'RUS', 'ZEP'].includes(profile.code) && week === 12 ? 'draft' : 'final',
+        soap: {
+          S: sessionSubject(setting, serviceIndex),
+          O: '',
+          A: assessmentFor(profile, p, activeSpecs),
+          P: planFor(profile, p, activeSpecs)
+        },
+        oEdited: false,
+        observations: '',
+        standout,
+        goalData,
+        createdAt: timestamp(date, profileIndex),
+        updatedAt: timestamp(date, profileIndex),
+        ...marker()
+      }
+      session.soap.O = generateO(profile.code, goals.filter((record) => record.clientId === clientId), goalData, '', standout)
+      sessions.push(session)
+    }
   }
 
   return { clients, goals, sessions }
 }
+
+const groupMeetings = Object.values(GROUP_WEEKS).reduce((sum, weeks) => sum + weeks.length, 0)
+const individualMeetings = Object.keys(INDIVIDUAL_DAY).length * INDIVIDUAL_WEEKS.length
+
+export const DEMO_DATASET_SUMMARY = Object.freeze({
+  clients: PROFILES.length,
+  goals: PROFILES.reduce((sum, profile) => sum + profile.goals.length, 0),
+  sessions: PROFILES.reduce((sum, profile) => sum + serviceWeeksFor(profile).length, 0),
+  groups: Object.keys(GROUP_MEMBERS).length,
+  meetings: groupMeetings + individualMeetings
+})

@@ -17,8 +17,18 @@ describe('O-section generation', () => {
       activity: 'structured drill'
     }
     expect(goalSentence('JD', goal, gd)).toBe(
-      'JD produced /r/ in words with 80% accuracy (8/10 trials) given minimal verbal, visual cues during structured drill.'
+      'JD produced /r/ in words with 80% accuracy (8/10 trials) given minimal verbal and visual cues during structured drill.'
     )
+  })
+
+  it('joins three cue types with an Oxford comma', () => {
+    const gd = {
+      goalId: 'g1',
+      trials: { correct: 8, total: 10 },
+      cueLevel: 'moderate',
+      cueTypes: ['verbal', 'visual', 'model']
+    }
+    expect(goalSentence('JD', goal, gd)).toContain('given moderate verbal, visual, and model cues')
   })
 
   it('reads independent productions as "independently"', () => {

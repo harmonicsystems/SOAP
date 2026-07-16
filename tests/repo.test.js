@@ -2,8 +2,6 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { get } from 'svelte/store'
 import { db } from '../src/lib/db.js'
 import * as repo from '../src/lib/repo.js'
-import { isSampleRecord, sampleDatasetState } from '../src/lib/sampleData.js'
-import { encryptJSON } from '../src/lib/crypto.js'
 
 // Uses production iteration counts (a few derivations ≈ 1-2s in node) —
 // acceptable for integration tests of the full encrypted-repository path.
@@ -154,156 +152,217 @@ describe('encrypted repository', () => {
     // each member is an independent, individually-openable session record
     expect(new Set(members.map((s) => s.id)).size).toBe(3)
 
-    // Sample-only groups inherit provenance; mixed sample/personal groups are
-    // rejected so removing the sample cannot strand a personal group member.
-    for (const id of ['c1', 'c2']) {
-      const client = get(repo.clients).find((record) => record.id === id)
-      await repo.putRecord('clients', {
-        ...client,
-        sample: true,
-        sampleDataset: 'longitudinal-v1'
-      })
-    }
-    const sampleGroup = await repo.createGroup(['c1', 'c2'], { date: '2026-07-12' })
-    expect(sampleGroup).toBeTruthy()
-    expect(
-      get(repo.sessions)
-        .filter((session) => session.groupId === sampleGroup)
-        .every((session) => session.sample === true)
-    ).toBe(true)
-    expect(await repo.createGroup(['c1', 'c3'], { date: '2026-07-12' })).toBeNull()
   }, 30000)
 
-  it('installs, repairs, reloads, and removes only the encrypted sample caseload', async () => {
-    await repo.createVault('sample dataset test passphrase')
+  it('keeps the passphrase-free demo entirely separate from the private vault', async () => {
+    await repo.createVault('demo isolation test passphrase')
     await repo.putRecord('clients', {
-      id: 'real-client',
-      code: 'REAL',
-      notes: 'keep this record',
+      id: 'private-client',
+      code: 'KEEP',
+      notes: 'private sentinel',
       archived: false,
       createdAt: 1
     })
-    await repo.savePhrase('S', 'arrived with a favorite book', ['expressive-language'])
-    const settingsBefore = structuredClone(get(repo.appSettings))
-
-    await repo.putRecord('clients', {
-      id: 'collision-client',
-      code: 'k7',
-      archived: false,
-      createdAt: 1
-    })
-    await expect(repo.installSampleDataset('2026-07-14')).rejects.toMatchObject({
-      message: 'sample-code-conflict',
-      conflicts: ['k7']
-    })
-    expect(get(repo.clients).filter(isSampleRecord)).toEqual([])
-    await repo.deleteRecord('clients', 'collision-client')
-
-    const idCollisions = [
-      ['clients', 'sample-longitudinal-v1-client-m14', { code: 'Z1', archived: false }],
-      ['goals', 'sample-longitudinal-v1-goal-m14-r', { clientId: 'real-client', text: 'keep' }],
-      ['sessions', 'sample-longitudinal-v1-session-m14-01', { clientId: 'real-client', date: '2026-01-01' }]
-    ]
-    for (const [table, id, fields] of idCollisions) {
-      await repo.putRecord(table, { id, createdAt: 1, ...fields })
-      await expect(repo.installSampleDataset('2026-07-14')).rejects.toMatchObject({
-        message: 'sample-id-conflict',
-        table,
-        recordId: id
-      })
-      await repo.deleteRecord(table, id)
-    }
-    const reservedId = 'sample-longitudinal-v1-client-m14'
-    await db.clients.put({
-      id: reservedId,
-      updatedAt: 1,
-      blob: crypto.getRandomValues(new Uint8Array(64))
-    })
-    await expect(repo.installSampleDataset('2026-07-14')).rejects.toMatchObject({
-      message: 'sample-id-conflict',
-      table: 'clients',
-      recordId: reservedId
-    })
-    await db.clients.delete(reservedId)
-
-    const epochBeforeInstall = (await db.meta.get('vault')).epoch
-    expect(await repo.installSampleDataset('2026-07-14')).toBe(true)
-    expect((await db.meta.get('vault')).epoch).not.toBe(epochBeforeInstall)
-    expect(
-      sampleDatasetState({
-        clients: get(repo.clients),
-        goals: get(repo.goals),
-        sessions: get(repo.sessions)
-      })
-    ).toBe('complete')
-    expect(get(repo.clients).filter(isSampleRecord)).toHaveLength(4)
-    expect(get(repo.goals).filter(isSampleRecord)).toHaveLength(6)
-    expect(get(repo.sessions).filter(isSampleRecord)).toHaveLength(30)
-    expect(get(repo.appSettings)).toEqual(settingsBefore)
-
-    const sampleRow = await db.clients.get('sample-longitudinal-v1-client-m14')
-    expect(Object.keys(sampleRow).sort()).toEqual(['blob', 'id', 'updatedAt'])
-    expect(new TextDecoder().decode(sampleRow.blob)).not.toContain('M14')
-
-    // A missing canonical record is repaired without duplicates, and an
-    // evaluator-created sample descendant is reset with the sample.
-    const missing = get(repo.sessions).find(isSampleRecord)
-    await repo.deleteRecord('sessions', missing.id)
     await repo.putRecord('goals', {
-      id: 'extra-sample-goal',
-      clientId: 'sample-longitudinal-v1-client-m14',
-      domain: 'other',
-      text: 'temporary sample edit',
+      id: 'private-goal',
+      clientId: 'private-client',
+      domain: 'expressive-language',
+      text: 'private goal sentinel',
       status: 'active',
-      createdAt: 2,
-      sample: true,
-      sampleDataset: 'longitudinal-v1'
+      createdAt: 1
     })
-    expect(await repo.installSampleDataset('2026-07-14')).toBe(true)
-    expect(get(repo.sessions).filter(isSampleRecord)).toHaveLength(30)
-    expect(get(repo.goals).some((goal) => goal.id === 'extra-sample-goal')).toBe(false)
-
-    await repo.lockNow()
-    expect(await repo.unlock('sample dataset test passphrase')).toBe(true)
-    expect(get(repo.clients).filter(isSampleRecord)).toHaveLength(4)
-
-    // Simulate a sample descendant committed by another tab before the
-    // removal epoch rotates. It is absent from this tab's cache, so removal
-    // must reload the quiesced vault before selecting ids.
-    const hiddenSample = {
-      id: 'sample-descendant-from-another-tab',
-      clientId: 'sample-longitudinal-v1-client-m14',
-      date: '2026-07-14',
-      sample: true,
-      sampleDataset: 'longitudinal-v1',
-      updatedAt: 2
+    await repo.savePhrase('S', 'private learned phrase sentinel', ['expressive-language'])
+    await repo.saveSettings({
+      ...get(repo.appSettings),
+      therapistName: 'Private Therapist'
+    })
+    const privateSettings = get(repo.appSettings)
+    let flushed = false
+    const off = repo.onBeforeLock(async () => {
+      flushed = !!(await repo.putRecord('sessions', {
+        id: 'private-pending-session',
+        clientId: 'private-client',
+        date: '2026-07-14',
+        createdAt: 2
+      }))
+    })
+    expect(await repo.enterDemo('2026-07-14')).toBe(true)
+    off()
+    expect(flushed).toBe(true)
+    expect(get(repo.appMode)).toBe('demo')
+    expect(get(repo.locked)).toBe(false)
+    expect(get(repo.clients)).toHaveLength(25)
+    expect(get(repo.clients).some((client) => client.id === 'private-client')).toBe(false)
+    expect(get(repo.appSettings).therapistName).toBe('')
+    expect(repo.currentKey()).toBeNull()
+    expect(() => repo.plainSnapshot()).toThrow('private-vault-required')
+    const privateRowsAfterEntry = {
+      clients: await db.clients.toArray(),
+      goals: await db.goals.toArray(),
+      sessions: await db.sessions.toArray(),
+      settings: await db.settings.toArray(),
+      meta: await db.meta.toArray()
     }
-    await db.sessions.put({
-      id: hiddenSample.id,
-      updatedAt: hiddenSample.updatedAt,
-      blob: await encryptJSON(repo.currentKey(), hiddenSample)
-    })
-    expect(get(repo.sessions).some((session) => session.id === hiddenSample.id)).toBe(false)
 
-    const epochBeforeRemove = (await db.meta.get('vault')).epoch
-    expect(await repo.removeSampleDataset()).toBe(true)
-    expect((await db.meta.get('vault')).epoch).not.toBe(epochBeforeRemove)
-    expect(get(repo.clients).filter(isSampleRecord)).toEqual([])
-    expect(get(repo.goals).filter(isSampleRecord)).toEqual([])
-    expect(get(repo.sessions).filter(isSampleRecord)).toEqual([])
-    expect(await db.sessions.get(hiddenSample.id)).toBeUndefined()
-    expect(get(repo.clients)).toContainEqual(expect.objectContaining({ id: 'real-client', code: 'REAL' }))
-    expect(get(repo.appSettings)).toEqual(settingsBefore)
+    const demoSession = get(repo.sessions)[0]
+    const demoGoal = get(repo.goals)[0]
+    await repo.putRecord('sessions', { ...demoSession, durationMin: 99 })
+    await repo.deleteRecord('goals', demoGoal.id)
+    await repo.putRecord('clients', {
+      id: 'temporary-demo-client',
+      code: 'TMP',
+      archived: false,
+      createdAt: 3
+    })
+    await repo.saveSettings({ ...get(repo.appSettings), therapistName: 'Temporary Demo' })
+    await repo.savePhrase('S', 'temporary demo phrase')
+    const groupId = await repo.createGroup(get(repo.clients).slice(0, 2).map((client) => client.id), {
+      date: '2026-03-20',
+      durationMin: 30
+    })
+    expect(groupId).toEqual(expect.any(String))
+    expect(get(repo.demoDirty)).toBe(true)
+    expect(get(repo.clients).some((client) => client.id === 'temporary-demo-client')).toBe(true)
+    expect(get(repo.clients).find((client) => client.id === 'temporary-demo-client')).toEqual(
+      expect.objectContaining({ sample: true, sampleDataset: 'winter-trimester-v2' })
+    )
+    expect({
+      clients: await db.clients.toArray(),
+      goals: await db.goals.toArray(),
+      sessions: await db.sessions.toArray(),
+      settings: await db.settings.toArray(),
+      meta: await db.meta.toArray()
+    }).toEqual(privateRowsAfterEntry)
+
+    // Reset awaits the outgoing screen's pending save, then rebuilds the
+    // canonical fixture afterward; the stale working copy cannot resurrect.
+    const resetSession = get(repo.sessions)[0]
+    const offReset = repo.onBeforeLock(() =>
+      repo.putRecord('sessions', { ...resetSession, durationMin: 123 })
+    )
+    expect(await repo.resetDemo('2026-07-14')).toBe(true)
+    offReset()
+    expect(get(repo.sessions).find((session) => session.id === resetSession.id)?.durationMin).not.toBe(123)
+    expect(get(repo.clients)).toHaveLength(25)
+    expect(get(repo.clients).some((client) => client.id === 'temporary-demo-client')).toBe(false)
+    expect(get(repo.demoDirty)).toBe(false)
+    expect(await repo.resetDemo('2026-07-14')).toBe(true)
+    expect(get(repo.clients)).toHaveLength(25)
+    expect(get(repo.sessions)).toHaveLength(268)
+    expect(repo.exitDemo()).toBe(true)
+    expect(get(repo.appMode)).toBe('locked')
+    expect(get(repo.clients)).toEqual([])
+
+    expect(await repo.unlock('demo isolation test passphrase')).toBe(true)
+    expect(get(repo.clients)).toContainEqual(
+      expect.objectContaining({ id: 'private-client', code: 'KEEP', notes: 'private sentinel' })
+    )
+    expect(get(repo.sessions)).toContainEqual(expect.objectContaining({ id: 'private-pending-session' }))
+    expect(get(repo.goals)).toContainEqual(expect.objectContaining({ id: 'private-goal' }))
+    expect(get(repo.appSettings)).toEqual(privateSettings)
   }, 30000)
 
-  it('stops sample installation when the vault epoch is stale', async () => {
-    await repo.createVault('sample stale epoch passphrase')
-    const vault = await db.meta.get('vault')
-    await db.meta.put({ ...vault, epoch: 'changed-in-another-tab' })
+  it('cancels stale create and unlock completions when demo entry wins the lifecycle', async () => {
+    const pendingCreate = repo.createVault('stale create passphrase')
+    await repo.enterDemo('2026-07-14')
+    expect(await pendingCreate).toBe(false)
+    expect(get(repo.appMode)).toBe('demo')
+    expect(repo.currentKey()).toBeNull()
+    expect(await db.meta.get('vault')).toBeUndefined()
 
-    expect(await repo.installSampleDataset('2026-07-14')).toBe(false)
+    repo.exitDemo()
+    await repo.createVault('stale unlock passphrase')
+    await repo.putRecord('clients', { id: 'private', code: 'PV', archived: false, createdAt: 1 })
+    await repo.lockNow()
+    const pendingUnlock = repo.unlock('stale unlock passphrase')
+    await repo.enterDemo('2026-07-14')
+    expect(await pendingUnlock).toBe(false)
+    expect(get(repo.appMode)).toBe('demo')
+    expect(get(repo.clients).some((client) => client.id === 'private')).toBe(false)
+    expect(repo.currentKey()).toBeNull()
+  }, 30000)
+
+  it('serializes concurrent first-run vault creation', async () => {
+    const attempts = await Promise.allSettled([
+      repo.createVault('first concurrent passphrase'),
+      repo.createVault('second concurrent passphrase')
+    ])
+    expect(attempts.filter((attempt) => attempt.status === 'fulfilled' && attempt.value === true)).toHaveLength(1)
+    expect(attempts.filter((attempt) => attempt.status === 'rejected' && attempt.reason?.message === 'vault-exists')).toHaveLength(1)
+    await repo.lockNow()
+    const firstWorks = await repo.unlock('first concurrent passphrase')
+    if (firstWorks) await repo.lockNow()
+    const secondWorks = await repo.unlock('second concurrent passphrase')
+    expect(Number(firstWorks) + Number(secondWorks)).toBe(1)
+  }, 30000)
+
+  it('awaits destroy-time writes before entering demo', async () => {
+    await repo.createVault('tracked write passphrase')
+    const pending = repo.trackPendingWrite(
+      repo.putRecord('sessions', {
+        id: 'destroy-save',
+        clientId: 'private-client',
+        date: '2026-07-14',
+        notes: 'x'.repeat(1024 * 1024),
+        createdAt: 1
+      })
+    )
+    await repo.enterDemo('2026-07-14')
+    expect(await pending).toEqual(expect.objectContaining({ id: 'destroy-save' }))
+    repo.exitDemo()
+    expect(await repo.unlock('tracked write passphrase')).toBe(true)
+    expect(get(repo.sessions)).toContainEqual(expect.objectContaining({ id: 'destroy-save' }))
+  }, 30000)
+
+  it('cancels rekey, import, and group creation when the app switches to demo', async () => {
+    await repo.createVault('exclusive race passphrase')
+    await repo.putRecord('clients', { id: 'c1', code: 'AA', archived: false, createdAt: 1 })
+    await repo.putRecord('clients', { id: 'c2', code: 'BB', archived: false, createdAt: 1 })
+    await repo.putRecord('goals', { id: 'g1', clientId: 'c1', domain: 'other', text: 'target', status: 'active', createdAt: 1 })
+
+    const pendingGroup = repo.createGroup(['c1', 'c2'], { date: '2026-07-14' })
+    await repo.enterDemo('2026-07-14')
+    expect(await pendingGroup).toBeNull()
+    repo.exitDemo()
+    expect(await repo.unlock('exclusive race passphrase')).toBe(true)
+    expect(get(repo.sessions)).toHaveLength(0)
+
+    const pendingRekey = repo.changePassphrase('exclusive race passphrase', 'replacement passphrase')
+    await repo.enterDemo('2026-07-14')
+    expect(await pendingRekey).toBe(false)
+    repo.exitDemo()
+    expect(await repo.unlock('exclusive race passphrase')).toBe(true)
+
+    const pendingImport = repo.importData({
+      clients: [{ id: 'imported', code: 'IM', notes: 'x'.repeat(1024 * 1024), updatedAt: 2 }],
+      goals: [],
+      sessions: []
+    }, 'replace')
+    await repo.enterDemo('2026-07-14')
+    expect(await pendingImport).toBe(false)
+    repo.exitDemo()
+    expect(await repo.unlock('exclusive race passphrase')).toBe(true)
+    expect(get(repo.clients).some((client) => client.id === 'imported')).toBe(false)
+    expect(get(repo.clients).map((client) => client.id).sort()).toEqual(['c1', 'c2'])
+  }, 60000)
+
+  it('does not publish an unlock snapshot after the vault epoch changes', async () => {
+    await repo.createVault('unlock epoch passphrase')
+    await repo.putRecord('clients', {
+      id: 'large',
+      code: 'LG',
+      notes: 'x'.repeat(1024 * 1024),
+      archived: false,
+      createdAt: 1
+    })
+    await repo.lockNow()
+    const pending = repo.unlock('unlock epoch passphrase')
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    const vault = await db.meta.get('vault')
+    await db.meta.put({ ...vault, epoch: 'changed-during-unlock' })
+    expect(await pending).toBe(false)
     expect(get(repo.locked)).toBe(true)
-    expect(await db.clients.count()).toBe(0)
+    expect(get(repo.clients)).toEqual([])
   }, 30000)
 
   it('drops record and settings writes that began before an epoch change', async () => {

@@ -1,6 +1,7 @@
 # Public demo, trimester caseload, and onboarding — implementation plan
 
-- Status: proposed for review
+- Status: implemented and technically verified on `codex/public-demo-onboarding`; adversarial
+  review complete and confirmed fixes applied; human SLP content review pending before merge
 - Umbrella feature ID: `F-007`
 - Subfeatures:
   - `F-007A` — public, passphrase-free demo runtime
@@ -11,7 +12,7 @@
 - Primary audience: school-based SLPs evaluating SOAP Note Builder
 - Initial product direction: David Nyman
 - Architecture and planning: David Nyman + Codex
-- Implementation owner: unassigned
+- Implementation owner: Codex
 - Human clinical reviewer: required before merge
 - Starting branch/commit: `codex/sandbox-demo` at `1e25d78`
 
@@ -422,13 +423,13 @@ real name. All meet the two-to-three-letter rule.
 | FEN | Articulation | 1 | Group B | noisy but upward trajectory |
 | GRA | Articulation | 2 | Group B | self-correction increases while measured accuracy ends slightly lower |
 | HUX | Articulation | 1 | Group B | goal met, followed by maintenance samples |
-| IVO | Expressive language | 2 | Group C | morphosyntax improves; formulation remains variable |
+| IVQ | Expressive language | 2 | Group C | morphosyntax improves; formulation remains variable |
 | JET | Expressive language | 1 | Group C | rebound after a service gap does not reach the early-term level |
 | KAL | Expressive language | 1 | Group C | stronger with visuals; cue dependence persists |
 | LUM | Expressive language | 2 | Group D | different trajectories across narrative and sentences |
 | MEP | Expressive language | 1 | Group D | remains essentially flat after a task adjustment |
 | NIX | Receptive language | 1 | Group D | high accuracy with moderate cues, not yet met |
-| ORA | Receptive language | 2 | Group E | concepts improve from structured to mixed directions |
+| ORQ | Receptive language | 2 | Group E | concepts improve from structured to mixed directions |
 | PAV | Receptive language | 1 | Group E | inferencing varies by context with no clear trimester trend |
 | QET | Receptive language | 1 | Group E | steady improvement with fading repetition |
 | RUS | Social-pragmatic | 2 | Group F | context-dependent variability with no overall upward trend |
@@ -446,9 +447,9 @@ real name. All meet the two-to-three-letter rule.
 |---|---|---|---|
 | A | BEX, CY, DOR | weekly | articulation group with distinct targets |
 | B | ELM, FEN, GRA, HUX | weekly | carryover and self-monitoring |
-| C | IVO, JET, KAL | weekly | expressive-language group |
+| C | IVQ, JET, KAL | weekly | expressive-language group |
 | D | LUM, MEP, NIX | weekly | mixed expressive/receptive language |
-| E | ORA, PAV, QET | weekly | receptive-language tasks |
+| E | ORQ, PAV, QET | weekly | receptive-language tasks |
 | F | RUS, SIV, TOL, UMB | weekly | social-pragmatic peer context |
 | G | VEK, WIR | weekly | fluency support with separate individual notes |
 
@@ -464,10 +465,10 @@ Student-level outcomes should be intentionally distributed as follows:
 | Outcome class | Students | Proposed codes | What the data should show |
 |---|---:|---|---|
 | Clear progress or criterion attainment | 5 | AV, HUX, QET, SIV, TOL | meaningful upward data plus reduced support or a met goal |
-| Modest, noisy gains | 6 | FEN, KAL, ORA, UMB, VEK, ZEP | some improvement, but variability and/or criteria remain |
+| Modest, noisy gains | 6 | FEN, KAL, ORQ, UMB, VEK, ZEP | some improvement, but variability and/or criteria remain |
 | Plateau/no meaningful net change | 5 | MEP, PAV, RUS, WIR, XAN | early and late performance remain broadly comparable |
 | Lower recent measured performance | 3 | DOR, GRA, JET | late-term samples end below early-term samples |
-| Mixed outcomes across goals | 4 | CY, ELM, IVO, LUM | one goal improves while another is flat or less successful |
+| Mixed outcomes across goals | 4 | CY, ELM, IVQ, LUM | one goal improves while another is flat or less successful |
 | Accuracy improves but cue criterion is unmet | 2 | BEX, NIX | percentage rises, but support remains above the target level |
 
 This distribution is an authored demonstration choice, not a claim about expected response rates,
@@ -675,7 +676,7 @@ The following are release blockers:
 
 ## 12. Performance and bundle budget
 
-Current implementation is approximately 101.4 KB gzipped with a 120 KB hard limit. `F-007`
+The reviewed implementation is approximately 105.5 KB gzipped with a 120 KB hard limit. `F-007`
 should target **no more than 112 KB total gzipped JS**, preserving at least 8 KB of headroom for
 future fixes.
 
@@ -998,7 +999,8 @@ Human Git authorship remains unchanged.
 
 | Date | Agent/person | Role | Phase | Commit/state | Notes |
 |---|---|---|---|---|---|
-| 2026-07-15 | David Nyman + Codex | product/architecture planning | 0–7 | uncommitted plan on `codex/sandbox-demo` | Defined separate public/private flows, ephemeral demo boundary, trimester dataset, live UI guide, implementation order, and contribution model |
+| 2026-07-15 | David Nyman + Codex | product/architecture planning | 0–7 | `84c467e` on `codex/public-demo-onboarding` | Defined separate public/private flows, ephemeral demo boundary, trimester dataset, live UI guide, implementation order, and contribution model |
+| 2026-07-15 | Codex | implementation, adversarial review, and browser verification | 1–7 | uncommitted implementation on `codex/public-demo-onboarding` | Built strict demo/private modes, Welcome/Create/Unlock, 25-student/35-goal/268-session trimester, real-UI guide, and Help integration. Three finder reviews plus a three-judge panel confirmed lifecycle, clinical-fixture, and accessibility issues; confirmed fixes are covered by a 99-test suite. Final production/offline browser matrix passed at 105.5 KB gzipped. |
 
 ## 21. Definition of done
 
@@ -1021,7 +1023,8 @@ The umbrella feature is done only when:
 - the private vault starts empty and no longer offers fictional-data installation;
 - no backend, analytics, telemetry, AI, runtime fetch, or new dependency is added;
 - clinical content is reviewed by a practicing SLP;
-- all exact note/O contracts remain unchanged;
+- the exact note contract remains unchanged; the O cue-list grammar revision is intentional and
+  test-locked;
 - all old and new tests pass;
 - production offline/browser acceptance passes on the target low-end profile;
 - final JavaScript is <=120 KB gzipped, with <=112 KB as the design target;

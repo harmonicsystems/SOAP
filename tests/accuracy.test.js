@@ -92,4 +92,20 @@ describe('criterion streaks', () => {
     expect(progressSummary(goal, sessions)).toContain('most recently 90% independently.')
     expect(progressSummary(goal, sessions)).not.toContain('independent cues')
   })
+
+  it('states a non-active goal status in copied progress text', () => {
+    const goal = {
+      id: 'g1',
+      text: 'Will produce complete sentences.',
+      shortLabel: 'complete sentences',
+      status: 'discontinued',
+      targetCriterion: { accuracyPct: 80, consecutiveSessions: 3, cueLevel: 'minimal' }
+    }
+    const sessions = [{
+      id: 's1',
+      date: '2026-01-01',
+      goalData: [{ goalId: 'g1', trials: { correct: 5, total: 10 }, cueLevel: 'moderate' }]
+    }]
+    expect(progressSummary(goal, sessions)).toContain('Status: Discontinued.')
+  })
 })
