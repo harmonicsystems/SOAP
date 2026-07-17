@@ -24,6 +24,12 @@ the source of truth for exact output formats.
   without a size justification in a code comment.** Only runtime dep is Dexie.
 - **Plain CSS** with custom properties (`src/styles/global.css`) — no framework. Low-stimulation
   design: muted palette, generous whitespace, big touch targets, works on a weak Acer/Edge laptop.
+  Four curated palettes (default/studio/clinic/evening, from the Harmonic Systems playground) +
+  a system-serif reading option, chosen in Settings → Appearance (`settings.appearance`), applied
+  via `data-palette`/`data-font` on `<html>` ONLY while a private workspace is unlocked — Welcome,
+  lock screens, and the demo always render the default; printing forces black-on-white.
+  **Every palette must pass `scripts/check-contrast.mjs` (WCAG AA), which gates `npm run build`
+  alongside the bundle-size check.** No CDN fonts ever — system font stacks only.
 - **Hash routing only** (`#/clients`, `#/session/:id`) — GitHub Pages has no SPA rewrites.
 - **De-identification by design:** clients are initials/short codes only (max 5 chars, no spaces).
   No field anywhere accepts names, DOB, or school.
@@ -128,7 +134,8 @@ Setting: { id:'settings', autoLockMinutes, therapistName?,
            phraseUsage {sectionKey: {count,lastUsedAt}},// ranking signal
            phraseDomains {sectionKey: [domainIds]},     // domain affinity
            customObsTags [{id,chip,clause,archived}], hiddenObsTags [builtinId],
-           caseloadTags [{id,label,archived}] }         // client organization labels
+           caseloadTags [{id,label,archived}],          // client organization labels
+           appearance {palette, font} }                 // device look; default outside private
 ```
 
 `domain` ∈ receptive-language, expressive-language, articulation-phonology, social-pragmatic

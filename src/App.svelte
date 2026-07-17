@@ -101,6 +101,19 @@
     }
   })
 
+  // Appearance is a private-workspace preference: the chosen palette/font
+  // apply only while unlocked. Welcome, lock screens, and the demo always
+  // render the default look, and locking resets the attributes because the
+  // settings store is wiped.
+  $effect(() => {
+    const active = $appMode === 'private' && !$locked ? ($appSettings.appearance ?? {}) : {}
+    const rootEl = document.documentElement
+    if (active.palette && active.palette !== 'default') rootEl.dataset.palette = active.palette
+    else delete rootEl.dataset.palette
+    if (active.font && active.font !== 'sans') rootEl.dataset.font = active.font
+    else delete rootEl.dataset.font
+  })
+
   // Private data auto-locks after inactivity or a long hidden interval. Demo
   // data has no key and is already temporary, so the private lock timer does
   // not run there.

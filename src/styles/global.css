@@ -6,19 +6,118 @@
   --bg: #f6f4f0;
   --surface: #ffffff;
   --ink: #2b2f33;
-  --muted: #6b7280;
+  --muted: #5e6672;
   --line: #e3e0da;
   --accent: #3a5a78;
   --accent-ink: #ffffff;
+  --accent-hover: #2f4a63;
   --accent-soft: #e7edf3;
-  --good: #4a7c59;
+  --good: #43714f;
+  --good-ink: #ffffff;
   --good-soft: #e9f2ec;
-  --bad: #a05252;
+  --bad: #9d4b4b;
+  --bad-ink: #ffffff;
+  --bad-hover: #8a4444;
   --bad-soft: #f6ecec;
+  --warn: #77601a;
   --warn-soft: #f7f1e3;
+  --warn-line: #e5d9b8;
+  --toast-bg: #2b2f33;
+  --toast-ink: #ffffff;
   --radius: 10px;
   --font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --mono: ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace;
+}
+
+/* ---- appearance (round 7): curated palettes + reading font ----
+   Selected in Settings → Appearance, stored in the encrypted settings, and
+   applied via data attributes on <html> only while a private workspace is
+   unlocked — Welcome, lock screens, and the demo always use the default.
+   Derived from the Harmonic Systems design playground; every palette must
+   pass scripts/check-contrast.mjs (WCAG AA), which gates the build. */
+
+/* Studio — paper-warm neutrals, bronze accent (from harmonic-systems). */
+:root[data-palette='studio'] {
+  --bg: #faf6ee;
+  --surface: #fffdf7;
+  --ink: #322e26;
+  --muted: #675f4e;
+  --line: #e7dfcd;
+  --accent: #7d5222;
+  --accent-ink: #ffffff;
+  --accent-hover: #64411b;
+  --accent-soft: #f2e8d4;
+  --good: #40684a;
+  --good-ink: #ffffff;
+  --good-soft: #e8f0e4;
+  --bad: #98494b;
+  --bad-ink: #ffffff;
+  --bad-hover: #7f3a3c;
+  --bad-soft: #f5eae3;
+  --warn: #74591c;
+  --warn-soft: #f4ecd6;
+  --warn-line: #e0d3ab;
+  --toast-bg: #322e26;
+  --toast-ink: #ffffff;
+}
+
+/* Clinic — cool clean neutrals, confident blue (from slpio.org). */
+:root[data-palette='clinic'] {
+  --bg: #f6f9fc;
+  --surface: #ffffff;
+  --ink: #1e2933;
+  --muted: #526174;
+  --line: #dbe4ed;
+  --accent: #17629f;
+  --accent-ink: #ffffff;
+  --accent-hover: #124e80;
+  --accent-soft: #e2eef9;
+  --good: #256b44;
+  --good-ink: #ffffff;
+  --good-soft: #e2f1e8;
+  --bad: #a04141;
+  --bad-ink: #ffffff;
+  --bad-hover: #8a3535;
+  --bad-soft: #f8eaea;
+  --warn: #6f5a14;
+  --warn-soft: #f5efdb;
+  --warn-line: #ddd2a8;
+  --toast-bg: #1e2933;
+  --toast-ink: #ffffff;
+}
+
+/* Evening — warm dark ground, teal accent (from resonance-scope /
+   the Harmonic signature), for low-light report writing. */
+:root[data-palette='evening'] {
+  color-scheme: dark;
+  --bg: #191813;
+  --surface: #232219;
+  --ink: #e9e6db;
+  --muted: #aaa494;
+  --line: #3d3b31;
+  --accent: #7cc9be;
+  --accent-ink: #0e1a18;
+  --accent-hover: #94d5cc;
+  --accent-soft: #223531;
+  --good: #97c8a4;
+  --good-ink: #14251a;
+  --good-soft: #24352a;
+  --bad: #dc9c9c;
+  --bad-ink: #2a1414;
+  --bad-hover: #e7b0b0;
+  --bad-soft: #3a2823;
+  --warn: #d8bb6b;
+  --warn-soft: #322c1c;
+  --warn-line: #4a4128;
+  /* Toasts invert against the page; on a dark ground that means a light pill
+     so the PWA update prompt stays unmistakable. */
+  --toast-bg: #e9e6db;
+  --toast-ink: #191813;
+}
+
+/* Serif reading option — system serif stacks only (no network fonts). */
+:root[data-font='serif'] {
+  --font: 'Charter', 'Iowan Old Style', 'Palatino Linotype', Georgia, serif;
 }
 
 * {
@@ -159,17 +258,17 @@ button:disabled {
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: #2f4a63;
+  background: var(--accent-hover);
 }
 
 .btn-danger {
   background: var(--bad);
   border-color: var(--bad);
-  color: #fff;
+  color: var(--bad-ink);
 }
 
 .btn-danger:hover:not(:disabled) {
-  background: #8a4444;
+  background: var(--bad-hover);
 }
 
 .btn-quiet {
@@ -303,7 +402,7 @@ button:disabled {
 
 .banner {
   background: var(--warn-soft);
-  border: 1px solid #e5d9b8;
+  border: 1px solid var(--warn-line);
   border-radius: var(--radius);
   padding: 0.6rem 1rem;
   margin: 0.75rem auto 0;
@@ -316,7 +415,7 @@ button:disabled {
 
 .demo-banner {
   background: var(--warn-soft);
-  border-bottom: 1px solid #e5d9b8;
+  border-bottom: 1px solid var(--warn-line);
   padding: 0.6rem max(1rem, calc((100vw - 880px) / 2));
   display: flex;
   align-items: center;
@@ -360,7 +459,7 @@ button:disabled {
 
 .tag.warn {
   background: var(--warn-soft);
-  color: #8a6d1d;
+  color: var(--warn);
 }
 
 .tag.quiet {
@@ -424,7 +523,7 @@ button.tap.correct {
 
 button.tap.correct:hover:not(:disabled) {
   background: var(--good);
-  color: #fff;
+  color: var(--good-ink);
 }
 
 button.tap.incorrect {
@@ -435,7 +534,7 @@ button.tap.incorrect {
 
 button.tap.incorrect:hover:not(:disabled) {
   background: var(--bad);
-  color: #fff;
+  color: var(--bad-ink);
 }
 
 button.undo {
@@ -529,8 +628,8 @@ button.undo {
   bottom: 1.25rem;
   left: 50%;
   transform: translateX(-50%);
-  background: var(--ink);
-  color: #fff;
+  background: var(--toast-bg);
+  color: var(--toast-ink);
   border-radius: 999px;
   padding: 0.55rem 1.1rem;
   display: flex;
@@ -542,8 +641,8 @@ button.undo {
 
 .toast button {
   background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.5);
-  color: #fff;
+  border: 1px solid var(--toast-ink);
+  color: var(--toast-ink);
   min-height: 30px;
   padding: 0.15rem 0.7rem;
   border-radius: 999px;
@@ -685,7 +784,7 @@ button.undo {
 
 .warning-box {
   background: var(--warn-soft);
-  border: 1px solid #e5d9b8;
+  border: 1px solid var(--warn-line);
   border-radius: 8px;
   padding: 0.75rem;
   font-size: 0.9rem;
@@ -819,6 +918,32 @@ button.undo {
 
 .help-toc a:hover {
   text-decoration: underline;
+}
+
+/* ---- appearance picker (round 7) ---- */
+
+.field-label {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-bottom: 0.35rem;
+}
+
+.swatch-dots {
+  display: inline-flex;
+  gap: 3px;
+  margin-right: 0.4rem;
+  vertical-align: -1px;
+}
+
+.swatch-dots i {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  /* mid-grey alpha border stays visible on light chips, dark chips, and the
+     active accent chip alike — a dark swatch must not vanish on Evening */
+  border: 1px solid rgba(128, 128, 128, 0.5);
+  display: block;
 }
 
 /* ---- schedule / calendar (round 6) ---- */
@@ -965,6 +1090,32 @@ button.undo {
 /* ---- print: the note view is the PDF path (spec §5.5) ---- */
 
 @media print {
+  /* Notes print black-on-white regardless of the active palette (the
+     data-palette selectors share specificity; this block comes later). */
+  :root,
+  :root[data-palette] {
+    color-scheme: light;
+    --bg: #ffffff;
+    --surface: #ffffff;
+    --ink: #000000;
+    --muted: #444444;
+    --line: #cccccc;
+    --accent: #1a4a6e;
+    --accent-ink: #ffffff;
+    --accent-hover: #1a4a6e;
+    --accent-soft: #efefef;
+    --good: #2f5f3f;
+    --good-ink: #ffffff;
+    --good-soft: #efefef;
+    --bad: #7e3b3b;
+    --bad-ink: #ffffff;
+    --bad-hover: #7e3b3b;
+    --bad-soft: #efefef;
+    --warn: #6b5514;
+    --warn-soft: #f2f2f2;
+    --warn-line: #cccccc;
+  }
+
   body {
     background: #fff;
   }

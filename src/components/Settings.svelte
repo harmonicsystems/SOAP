@@ -32,6 +32,25 @@
     toast.show('Settings saved')
   }
 
+  // ---- appearance ----
+  // Swatch previews mirror each palette's bg/accent/good tokens in
+  // global.css; the build-time contrast gate keeps them honest.
+  const PALETTES = [
+    { id: 'default', label: 'Default', swatches: ['#f6f4f0', '#3a5a78', '#43714f'] },
+    { id: 'studio', label: 'Studio', swatches: ['#faf6ee', '#7d5222', '#40684a'] },
+    { id: 'clinic', label: 'Clinic', swatches: ['#f6f9fc', '#17629f', '#256b44'] },
+    { id: 'evening', label: 'Evening', swatches: ['#191813', '#7cc9be', '#97c8a4'] }
+  ]
+  const FONT_CHOICES = [
+    { id: 'sans', label: 'System sans' },
+    { id: 'serif', label: 'Serif' }
+  ]
+  const appearance = $derived($appSettings.appearance ?? { palette: 'default', font: 'sans' })
+
+  async function setAppearance(patch) {
+    await saveSettings({ ...$appSettings, appearance: { ...appearance, ...patch } })
+  }
+
   // ---- passphrase ----
   let curPass = $state('')
   let newPass = $state('')
@@ -245,6 +264,49 @@
     <input id="set-lock" type="number" min="1" max="120" bind:value={autoLockMinutes} style="width:90px" />
   </div>
   <button class="btn-primary" onclick={saveGeneral}>Save</button>
+</div>
+
+<div class="card">
+  <h2>Appearance</h2>
+  <p class="hint">
+    Every palette meets WCAG AA contrast (verified at build time). Your choice applies in this
+    unlocked workspace only — the lock screen and public demo keep the default look, and notes
+    always print black on white.
+  </p>
+  <div class="field">
+    <span class="field-label" id="palette-label">Palette</span>
+    <div class="chips" role="group" aria-labelledby="palette-label">
+      {#each PALETTES as p (p.id)}
+        <button
+          type="button"
+          class="chip"
+          class:active={appearance.palette === p.id}
+          aria-pressed={appearance.palette === p.id}
+          onclick={() => setAppearance({ palette: p.id })}
+        >
+          <span class="swatch-dots" aria-hidden="true">
+            {#each p.swatches as c (c)}<i style={`background:${c}`}></i>{/each}
+          </span>
+          {p.label}
+        </button>
+      {/each}
+    </div>
+  </div>
+  <div class="field" style="margin-bottom:0">
+    <span class="field-label" id="font-label">Reading font</span>
+    <div class="seg" role="group" aria-labelledby="font-label" style="max-width:16rem">
+      {#each FONT_CHOICES as f (f.id)}
+        <button
+          type="button"
+          class:active={appearance.font === f.id}
+          aria-pressed={appearance.font === f.id}
+          onclick={() => setAppearance({ font: f.id })}
+        >
+          {f.label}
+        </button>
+      {/each}
+    </div>
+  </div>
 </div>
 
 <div class="card">

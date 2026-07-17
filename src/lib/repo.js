@@ -103,6 +103,10 @@ export function defaultSettings() {
     customObsTags: [],
     // Built-in observation tag ids the clinician has hidden from goal cards.
     hiddenObsTags: [],
+    // Appearance (round 7): curated palette + reading font, applied only in
+    // an unlocked private workspace. Device preference — travels in backups
+    // like any setting, but merge-import keeps the local device's choice.
+    appearance: { palette: 'default', font: 'sans' },
     // Clinician-defined caseload tags: [{id, label, archived}] — neutral labels
     // (grade, room, site) for filtering/grouping the caseload. Archived, never
     // deleted, so clients referencing a retired tag keep rendering its badge.
