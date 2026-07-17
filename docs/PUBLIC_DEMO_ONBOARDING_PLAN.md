@@ -563,7 +563,10 @@ Tests must prove:
 - designated hero arcs produce the intended met, active, plateau, mixed, and lower-recent outcomes;
 - O is generated only through production `generateO()`;
 - A/P statements do not claim unsupported causes, prognosis, diagnosis, or treatment norms;
-- no key or value contains a name, DOB, school, grade, teacher, address, diagnosis, or schedule;
+- no key or value contains a name, DOB, school, teacher, address, or diagnosis. (Amended after
+  rounds 5–6: fictional grade-band caseload tags, room labels, and weekday `serviceDays` are
+  approved product features, deliberately present so the demo populates the organization and
+  Schedule views. The ban on names, DOB, school, teacher, address, and diagnosis stands.);
 - copied note text excludes UI demo labels, while printed sample notes include the banner.
 
 ## 9. Guide built from the actual UI
@@ -585,7 +588,7 @@ A small `DemoGuide` wrapper owns only:
 
 | Step | Real screen | Purpose | Interaction |
 |---:|---|---|---|
-| 1 | Caseload | Orient to 25 clients, goal counts, recent sessions, and group workflow | search for a code |
+| 1 | Caseload | Orient to 25 clients, goal counts, recent sessions, group workflow, and (round 5) tag filters, group-by views, and last-seen sort | search for a code; filter by a grade tag |
 | 2 | Client Detail for CY | Compare two goals and open longitudinal history | inspect early/latest sessions |
 | 3 | Progress for MEP | Show a realistic plateau with no meaningful trimester change | change date range; copy summary |
 | 4 | Designated draft Session for NIX | Demonstrate scoring, cue level, observations, and O regeneration | tap Correct/Incorrect and Undo |

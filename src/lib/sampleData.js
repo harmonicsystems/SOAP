@@ -13,8 +13,9 @@ const goal = (
   status = 'active',
   startWeek = 0,
   endWeek = 12,
-  criterion = null
-) => ({ label, target, arc, status, startWeek, endWeek, criterion })
+  criterion = null,
+  baselineText = null
+) => ({ label, target, arc, status, startWeek, endWeek, criterion, baselineText })
 
 // Student-level outcome classes intentionally include flat and lower recent
 // performance. They are fixture-design labels, not clinical classifications.
@@ -23,7 +24,7 @@ const PROFILES = [
     code: 'AV', domain: 'articulation-phonology', group: null, outcome: 'clear',
     goals: [
       goal('vocalic /r/ in sentences', 'produce vocalic /r/ in structured sentences', 'clear', 'met'),
-      goal('/r/ in connected speech', 'produce /r/ during a structured speaking sample', 'modest')
+      goal('/r/ in connected speech', 'produce /r/ during a structured speaking sample', 'modest-low')
     ]
   },
   { code: 'BEX', domain: 'articulation-phonology', group: 'A', outcome: 'cue-dependent', goals: [goal('/s/ and /z/ in sentences', 'produce /s/ and /z/ in structured sentences', 'cue')] },
@@ -39,10 +40,10 @@ const PROFILES = [
     code: 'ELM', domain: 'articulation-phonology', group: 'B', outcome: 'mixed',
     goals: [
       goal('velars in structured words', 'produce velar sounds in structured words', 'clear', 'active', 0, 12, { accuracyPct: 90, consecutiveSessions: 3, cueLevel: 'minimal' }),
-      goal('velars in connected speech', 'produce velar sounds during a connected-speech sample', 'plateau', 'discontinued', 0, 10)
+      goal('velars in connected speech', 'produce velar sounds during a connected-speech sample', 'plateau-low', 'discontinued', 0, 10)
     ]
   },
-  { code: 'FEN', domain: 'articulation-phonology', group: 'B', outcome: 'modest', goals: [goal('multisyllabic words', 'produce multisyllabic words with accurate sound sequencing', 'modest')] },
+  { code: 'FEN', domain: 'articulation-phonology', group: 'B', outcome: 'modest', goals: [goal('multisyllabic words', 'produce multisyllabic words with accurate sound sequencing', 'modest', 'active', 0, 12, { accuracyPct: 70, consecutiveSessions: 3, cueLevel: 'minimal' })] },
   {
     code: 'GRA', domain: 'articulation-phonology', group: 'B', outcome: 'lower-recent',
     goals: [
@@ -63,21 +64,21 @@ const PROFILES = [
   {
     code: 'LUM', domain: 'expressive-language', group: 'D', outcome: 'mixed',
     goals: [
-      goal('complete grammatical sentences', 'produce complete grammatical sentences during description', 'modest'),
+      goal('complete grammatical sentences', 'produce complete grammatical sentences during description', 'modest', 'active', 0, 12, { accuracyPct: 85, consecutiveSessions: 2, cueLevel: 'minimal' }),
       goal('narrative retells with key story elements', 'include key story elements in a short narrative retell', 'plateau')
     ]
   },
   { code: 'MEP', domain: 'expressive-language', group: 'D', outcome: 'plateau', goals: [goal('category-and-feature relationship explanations', 'explain category and feature relationships using complete sentences', 'plateau')] },
-  { code: 'NIX', domain: 'receptive-language', group: 'D', outcome: 'cue-dependent', goals: [goal('accurate responses to multistep directions', 'follow multistep directions containing temporal and spatial concepts', 'cue')] },
+  { code: 'NIX', domain: 'receptive-language', group: 'D', outcome: 'cue-dependent', goals: [goal('responses to multistep directions', 'follow multistep directions containing temporal and spatial concepts', 'cue')] },
   {
     code: 'ORQ', domain: 'receptive-language', group: 'E', outcome: 'modest',
     goals: [
-      goal('accurate responses to spatial-concept directions', 'follow directions containing spatial concepts', 'modest'),
-      goal('accurate responses to temporal-concept directions', 'follow directions containing before and after concepts', 'modest')
+      goal('responses to spatial-concept directions', 'follow directions containing spatial concepts', 'modest'),
+      goal('responses to temporal-concept directions', 'follow directions containing before and after concepts', 'modest')
     ]
   },
-  { code: 'PAV', domain: 'receptive-language', group: 'E', outcome: 'plateau', goals: [goal('accurate inference responses', 'answer inference questions from short spoken passages', 'plateau')] },
-  { code: 'QET', domain: 'receptive-language', group: 'E', outcome: 'clear', goals: [goal('accurate responses about auditory details', 'answer questions about key details from spoken directions', 'clear', 'met')] },
+  { code: 'PAV', domain: 'receptive-language', group: 'E', outcome: 'plateau', goals: [goal('inference responses', 'answer inference questions from short spoken passages', 'plateau', 'active', 0, 12, null, 'answered 7 of 12 inference questions during initial probes')] },
+  { code: 'QET', domain: 'receptive-language', group: 'E', outcome: 'clear', goals: [goal('responses about auditory details', 'answer questions about key details from short spoken passages', 'clear', 'met')] },
   {
     code: 'RUS', domain: 'social-pragmatic', group: 'F', outcome: 'plateau',
     goals: [
@@ -90,17 +91,17 @@ const PROFILES = [
   {
     code: 'UMB', domain: 'social-pragmatic', group: 'F', outcome: 'modest',
     goals: [
-      goal('accurate peer-perspective identifications', 'identify a peer perspective during structured scenarios', 'approaching'),
+      goal('peer-perspective identifications', 'identify a peer perspective during structured scenarios', 'approaching'),
       goal('clarifying questions', 'ask a relevant clarifying question during shared tasks', 'emerging')
     ]
   },
   { code: 'VEK', domain: 'fluency', group: 'G', outcome: 'modest', goals: [goal('speech samples using a selected fluency strategy', 'use a selected fluency strategy during structured speaking', 'late-independent')] },
-  { code: 'WIR', domain: 'fluency', group: 'G', outcome: 'plateau', goals: [goal('accurate identifications of strategy use', 'identify use of a selected fluency strategy in structured samples', 'plateau')] },
+  { code: 'WIR', domain: 'fluency', group: 'G', outcome: 'plateau', goals: [goal('identifications of strategy use', 'identify use of a selected fluency strategy in structured samples', 'plateau')] },
   { code: 'XAN', domain: 'voice', group: null, outcome: 'plateau', goals: [goal('speech samples using the agreed voice strategy', 'use an agreed voice strategy during structured speaking tasks', 'plateau')] },
   {
     code: 'ZEP', domain: 'other', group: null, outcome: 'modest',
     goals: [
-      goal('clarification requests', 'request clarification using an available communication modality', 'modest'),
+      goal('clarification requests', 'request clarification using an available communication modality', 'modest', 'active', 0, 12, null, 'requested clarification in 5 of 10 observed opportunities'),
       goal('relevant contributions during structured exchanges', 'share one relevant piece of information during a structured exchange', 'modest')
     ]
   }
@@ -179,15 +180,31 @@ const PROFILE_TAGS = {
 const GROUP_DURATIONS = { A: [30, 35, 30], B: [30, 30, 35], C: [35, 30, 30], D: [30, 35, 35], E: [30, 35, 30], F: [35, 30, 35], G: [30, 35, 30] }
 const INDIVIDUAL_DURATIONS = { AV: [25, 30, 25], XAN: [30, 25, 30], ZEP: [25, 35, 30] }
 const TOTALS = [16, 18, 20, 15, 17, 19, 16, 20, 18, 17, 20, 22]
+// Opportunity-based behaviors (pragmatics, fluency strategies, voice, and
+// functional communication) are scored per natural opportunity, not drilled —
+// realistic per-session counts are far smaller than articulation trial runs
+// (content review, 2026-07-17).
+const OPPORTUNITY_TOTALS = [10, 12, 9, 11, 12, 10, 8, 12, 11, 10, 12, 9]
+const OPPORTUNITY_DOMAINS = new Set(['social-pragmatic', 'fluency', 'voice', 'other'])
+// Deterministic per-client offset for totals/standout selection: profileIndex
+// deltas of 12 alias with the 12-slot bands, which cloned same-arc neighbors
+// (HUX/TOL); character-sum offsets keep selection varied AND reproducible.
+const codeSum = (code) => [...code].reduce((sum, ch) => sum + ch.charCodeAt(0), 0)
 
 const ARCS = {
   clear: [45, 52, 58, 63, 68, 73, 78, 82, 84, 86, 88],
   modest: [50, 54, 51, 58, 57, 61, 59, 64, 62, 67, 66],
+  // AV's connected-speech goal: same shape as modest, banded below the
+  // sentence-level goal — connected speech is the harder condition.
+  'modest-low': [42, 46, 44, 51, 49, 54, 52, 57, 55, 60, 62],
   supported: [48, 53, 50, 57, 55, 60, 58, 63, 61, 65, 67],
   approaching: [48, 54, 57, 62, 66, 69, 73, 76, 75, 82, 84],
   emerging: [35, 39, 37, 42, 41, 45, 44, 48, 46, 50, 51],
   'late-independent': [52, 55, 54, 56, 55, 58, 60, 61, 64, 66, 68],
   plateau: [58, 61, 56, 60, 59, 62, 57, 60, 61, 58, 60],
+  // ELM's connected-speech goal: a plateau that stays below the word-level
+  // baseline for the same sound class (no baseline inversion).
+  'plateau-low': [41, 44, 40, 43, 42, 45, 41, 43, 44, 42, 43],
   lower: [65, 68, 63, 61, 60, 58, 56, 55, 57, 53, 54],
   cue: [48, 55, 60, 66, 70, 74, 78, 82, 84, 85, 87]
 }
@@ -214,14 +231,14 @@ const ASSESSMENT = {
     'Some improvement was observed, while the full criterion remained unmet.'
   ],
   plateau: [
-    'Current performance was comparable to other early samples.',
+    'Initial samples established a working range for this target.',
     'Data remained variable without a clear upward trend.',
     'Recent performance remained comparable to earlier samples; criterion was not met.'
   ],
   'lower-recent': [
-    'Current performance was variable across tasks.',
+    'Performance varied across items within the session.',
     'Recent measured accuracy was lower than several earlier samples.',
-    'Late-term samples remained below the early-term range; no cause was inferred.'
+    'Late-term samples remained below the early-term range.'
   ],
   mixed: [
     'The two measured targets showed different response patterns.',
@@ -229,7 +246,7 @@ const ASSESSMENT = {
     'The goals ended the term with different measured outcomes.'
   ],
   'cue-dependent': [
-    'Accuracy increased with substantial support.',
+    'Accuracy was achieved only with substantial support.',
     'Accuracy continued to improve while moderate cueing remained necessary.',
     'Accuracy was high in recent samples, but cueing remained above the target criterion.'
   ]
@@ -242,20 +259,67 @@ const PLAN = {
     'Collect periodic maintenance samples for the met target.'
   ],
   modest: 'Continue the current target and collect additional data across varied structured tasks.',
-  plateau: 'Continue data collection and review task and support selection using clinician judgment.',
-  'lower-recent': 'Continue data collection and review task demands and supports without attributing a cause.',
+  plateau: 'Continue data collection and review task and support selection.',
+  'lower-recent': 'Continue data collection and review task demands and supports.',
   mixed: 'Continue both measured targets at their current support levels and review the patterns separately.',
   'cue-dependent': 'Continue the target while systematically testing whether cues can be reduced.'
 }
 
+// Five lines per pool so a 10-12-session client never repeats a standout on
+// adjacent visits, plus a codeSum offset so same-arc groupmates don't log the
+// identical "specific" moment on the same date.
 const STANDOUT = {
-  clear: ['Used a visual reminder before responding', 'Paused to check one response', 'Corrected one response after a brief pause'],
-  modest: ['Stayed with the task after an incorrect response', 'Requested one repetition', 'Used the provided visual organizer'],
-  plateau: ['Performance varied across repeated items', 'Used the same support across easier and harder items', 'Completed the task with the planned supports'],
-  'lower-recent': ['Requested a repetition during the final activity', 'Needed the planned model before several responses', 'Completed the activity despite variable responses'],
-  mixed: ['Responded differently across the two target activities', 'Used a visual support for one target but not the other', 'Asked to review one direction before continuing'],
-  'cue-dependent': ['Reached high accuracy after a verbal model', 'Waited for the visual cue before several responses', 'Completed the final items with moderate support']
+  clear: [
+    'Used a visual reminder before responding',
+    'Paused to check one response',
+    'Corrected one response after a brief pause',
+    'Slowed down before a harder item',
+    'Repeated a tricky item without being asked'
+  ],
+  modest: [
+    'Stayed with the task after an incorrect response',
+    'Requested one repetition',
+    'Used the provided visual organizer',
+    'Asked to try one item again',
+    'Kept working after a missed item'
+  ],
+  plateau: [
+    'Performance varied across repeated items',
+    'Used the same support across easier and harder items',
+    'Completed the task with the planned supports',
+    'Approached repeated items the same way across the session',
+    'Finished each activity with the supports in place'
+  ],
+  'lower-recent': [
+    'Requested a repetition during the final activity',
+    'Needed the planned model before several responses',
+    'Completed the activity despite variable responses',
+    'Took extra time before several responses',
+    'Asked to revisit an earlier item'
+  ],
+  mixed: [
+    'Responded differently across the two target activities',
+    'Used a visual support for one target but not the other',
+    'Asked to review one direction before continuing',
+    'Paused before starting a new activity',
+    'Requested one repetition before responding'
+  ],
+  'cue-dependent': [
+    'Reached high accuracy after a verbal model',
+    'Waited for the visual cue before several responses',
+    'Completed the final items with moderate support',
+    'Responded quickly once the cue was given',
+    'Waited for support before attempting harder items'
+  ]
 }
+
+// Sessions that measured only ONE goal must never get a two-target standout
+// (mixed-outcome clients keep sessions after a goal is discontinued).
+const MIXED_SINGLE_TARGET = [
+  'Asked to review one direction before continuing',
+  'Paused before starting a new activity',
+  'Requested one repetition before responding'
+]
 
 export const SAMPLE_CLIENT_IDS = Object.freeze(
   Object.fromEntries(PROFILES.map((profile) => [profile.code.toLowerCase(), `${prefix}-client-${profile.code.toLowerCase()}`]))
@@ -323,7 +387,7 @@ function serviceWeeksFor(profile) {
 function cueFor(arc, position, length) {
   if (arc === 'cue') return position < 2 ? 'maximal' : 'moderate'
   if (arc === 'clear') return position < 3 ? 'moderate' : 'minimal'
-  if (arc === 'modest' || arc === 'approaching') return position < Math.ceil(length / 2) ? 'moderate' : 'minimal'
+  if (arc === 'modest' || arc === 'modest-low' || arc === 'approaching') return position < Math.ceil(length / 2) ? 'moderate' : 'minimal'
   if (arc === 'late-independent') {
     if (position >= length - 3) return 'independent'
     return position < 4 ? 'moderate' : 'minimal'
@@ -386,30 +450,52 @@ function sessionSubject(setting, position) {
   return list[position % list.length]
 }
 
-function standoutFor(profile, position, length) {
+function standoutFor(profile, position, length, activeCount) {
   if (profile.code === 'GRA') {
     if (position < Math.ceil(length / 3)) return 'Used a visual reminder before checking a response'
     if (position < Math.ceil((length * 2) / 3)) return 'Paused to check one production before continuing'
     return 'Self-corrected one production before feedback'
   }
-  if (profile.code === 'KAL') return 'Used the visual organizer before several explanations'
+  if (profile.code === 'KAL') {
+    if (position < Math.ceil(length / 3)) return 'Used the visual organizer before several explanations'
+    if (position < Math.ceil((length * 2) / 3)) return 'Referred back to the visual organizer during longer explanations'
+    return 'Began one explanation before checking the organizer'
+  }
   if (profile.code === 'VEK' && position >= length - 3) return 'Selected and used the strategy independently in the final speaking sample'
   if (profile.code === 'ZEP') {
     if (position < Math.ceil(length / 3)) return 'Selected a picture response during the structured exchange'
     if (position < Math.ceil((length * 2) / 3)) return 'Combined a picture response with a gesture'
     return 'Used gesture and a spoken response across two activities'
   }
-  const list = STANDOUT[profile.outcome]
-  return list[(position + PROFILES.indexOf(profile)) % list.length]
+  const list =
+    profile.outcome === 'mixed' && activeCount < 2 ? MIXED_SINGLE_TARGET : STANDOUT[profile.outcome]
+  return list[(position + codeSum(profile.code)) % list.length]
 }
 
 function assessmentFor(profile, p, activeSpecs) {
   if (profile.outcome === 'mixed' && activeSpecs.length < 2) {
-    const arc = activeSpecs[0]?.arc
-    if (arc === 'plateau') return ASSESSMENT.plateau[p]
+    const spec = activeSpecs[0]
+    const arc = spec?.arc
+    if (arc === 'plateau' || arc === 'plateau-low') return ASSESSMENT.plateau[p]
     if (arc === 'lower') return ASSESSMENT['lower-recent'][p]
-    if (arc === 'clear') return ASSESSMENT.clear[p]
+    if (arc === 'clear') {
+      // A surviving clear-arc goal that is still ACTIVE must never claim its
+      // criterion was met (ELM ends at 89% against a stated 90%).
+      if (p === 2 && spec.status !== 'met') {
+        return 'Recent samples approached the stated criterion with minimal cues.'
+      }
+      return ASSESSMENT.clear[p]
+    }
     return ASSESSMENT.modest[p]
+  }
+  if (profile.outcome === 'clear' && p === 2) {
+    const hasMet = activeSpecs.some((spec) => spec.status === 'met')
+    const hasActive = activeSpecs.some((spec) => spec.status === 'active')
+    // A session-wide "met the criteria" claim is only true when every measured
+    // goal met; AV carries one met and one active goal, so stay scoped.
+    if (hasMet && hasActive) {
+      return 'One target met its stated criteria; the remaining target remained below criterion.'
+    }
   }
   return ASSESSMENT[profile.outcome][p]
 }
@@ -424,7 +510,7 @@ function planFor(profile, p, activeSpecs) {
   }
   if (profile.outcome === 'mixed' && activeSpecs.length < 2) {
     const arc = activeSpecs[0]?.arc
-    if (arc === 'plateau') return PLAN.plateau
+    if (arc === 'plateau' || arc === 'plateau-low') return PLAN.plateau
     if (arc === 'lower') return PLAN['lower-recent']
     return PLAN.modest
   }
@@ -463,14 +549,22 @@ export function buildSampleDataset({ anchorDate } = {}) {
   const goals = PROFILES.flatMap((profile, profileIndex) =>
     profile.goals.map((spec, index) => {
       const criterion = criterionFor(spec)
+      // Opportunity-based skills are conventionally written "in N% of observed
+      // opportunities" rather than "with N% accuracy" (content review).
+      const measure = OPPORTUNITY_DOMAINS.has(profile.domain)
+        ? `in ${criterion.accuracyPct}% of observed opportunities`
+        : `with ${criterion.accuracyPct}% accuracy`
+      const baselineUnit = OPPORTUNITY_DOMAINS.has(profile.domain) ? '% of opportunities' : '%'
       return {
         id: goalId(profile.code, index),
         clientId: SAMPLE_CLIENT_IDS[profile.code.toLowerCase()],
         domain: profile.domain,
-        text: `Will ${spec.target} with ${criterion.accuracyPct}% accuracy given ${criterion.cueLevel} cues across ${criterion.consecutiveSessions} consecutive sessions.`,
+        text: `Will ${spec.target} ${measure} given ${criterion.cueLevel} cues across ${criterion.consecutiveSessions} consecutive sessions.`,
         shortLabel: spec.label,
         targetCriterion: criterion,
-        baseline: `${ARCS[spec.arc][0]}% with ${spec.arc === 'cue' ? 'maximal' : 'moderate'} cues in structured tasks`,
+        baseline:
+          spec.baselineText ??
+          `${ARCS[spec.arc][0]}${baselineUnit} with ${spec.arc === 'cue' ? 'maximal' : 'moderate'} cues in structured tasks`,
         status: spec.status,
         demoArc: spec.arc,
         createdAt: timestamp(term.start, profileIndex + index),
@@ -492,20 +586,26 @@ export function buildSampleDataset({ anchorDate } = {}) {
       const setting = profile.group ? 'group' : 'individual'
       const activePairs = clientGoals.filter(({ spec }) => week >= spec.startWeek && week <= spec.endWeek)
       const p = phase(serviceIndex, serviceWeeks.length)
-      const standout = standoutFor(profile, serviceIndex, serviceWeeks.length)
+      const standout = standoutFor(profile, serviceIndex, serviceWeeks.length, activePairs.length)
       const goalData = activePairs.map(({ spec, goal: record }, goalIndex) => {
         const activeWeeks = activeWeeksFor(spec, serviceWeeks)
         const position = activeWeeks.indexOf(week)
         const targetPct = pctFor(spec.arc, position, activeWeeks.length)
-        const total = TOTALS[(serviceIndex + goalIndex + profileIndex) % TOTALS.length]
+        const band = OPPORTUNITY_DOMAINS.has(profile.domain) ? OPPORTUNITY_TOTALS : TOTALS
+        const total = band[(serviceIndex + goalIndex + codeSum(profile.code)) % band.length]
         const correct = Math.max(0, Math.min(total, Math.round((targetPct / 100) * total)))
         const cueLevel = cueFor(spec.arc, position, activeWeeks.length)
-        const observations = observationFor(profile, spec, position, activeWeeks.length)
+        // Independent performance must not be credited to supports, and a
+        // visual-supports clause only renders when visual cues were in play.
+        let observations =
+          cueLevel === 'independent' ? [] : observationFor(profile, spec, position, activeWeeks.length)
+        const types = cueTypes(profile.domain, cueLevel, position, observations, standout)
+        observations = observations.filter((tag) => tag !== 'visual' || types.includes('visual'))
         return {
           goalId: record.id,
           trials: { correct, total },
           cueLevel,
-          cueTypes: cueTypes(profile.domain, cueLevel, position, observations, standout),
+          cueTypes: types,
           observations,
           activity: ACTIVITIES[profile.domain][(serviceIndex + goalIndex) % ACTIVITIES[profile.domain].length],
           notes: ''

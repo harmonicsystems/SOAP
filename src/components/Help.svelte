@@ -11,6 +11,7 @@
     ['quick-start', 'Quick start'],
     ['demo', 'Public demo'],
     ['session', 'Running a session'],
+    ['schedule', 'Planning your week'],
     ['corpus', 'Making notes yours'],
     ['backups', 'Backups & restore'],
     ['progress', 'Progress reports'],
@@ -119,6 +120,20 @@
     </ul>
   </section>
 
+  <section class="card" id="schedule">
+    <h2>Planning your week</h2>
+    <p>Organize a bigger caseload and see it as a schedule:</p>
+    <ul>
+      <li><strong>Tags &amp; service days</strong> — on each student's page, assign caseload tags (define them in <em>Settings → Caseload tags</em>) and tap the usual service days. Use neutral labels only — grades, room numbers, days — never teacher, school, or student names.</li>
+      <li><strong>Caseload views</strong> — filter by tag, group the list by tag, goal domain, or service day, and sort by last seen to surface who is overdue.</li>
+      <li><strong>Schedule screen</strong> — the week view shows who is planned each weekday next to what was actually documented (final, draft, or nothing yet); tapping a scheduled student opens or starts that day's session. The month view shows per-day session and draft counts for an accountability sweep.</li>
+    </ul>
+    <p class="hint">
+      In the demo, the fictional caseload already carries grade and room tags plus service days, so
+      the Schedule and grouping views arrive populated.
+    </p>
+  </section>
+
   <section class="card" id="corpus">
     <h2>Making notes yours</h2>
     <p>Reuse your own wording so notes stay specific and real instead of boilerplate:</p>
@@ -162,7 +177,7 @@
     <ul>
       <li><strong>Private workspaces are encrypted on your device.</strong> Every private record is encrypted with AES-GCM. The key is derived from your passphrase with PBKDF2 (310,000 iterations); the passphrase and key are never stored anywhere.</li>
       <li><strong>The public demo is separate and temporary.</strong> Fictional records live only in memory. A direct demo visit does not read, decrypt, or write the private vault; if you first visit Welcome, the app checks only whether a vault exists so it can show the correct private-workspace button. Demo records reset when you leave or reload. Do not put real student information in them.</li>
-      <li><strong>Nothing leaves this device.</strong> There are no servers, no accounts, no analytics, no telemetry, and no fonts or scripts loaded from the internet. Nothing you enter is ever transmitted.</li>
+      <li><strong>Nothing leaves this device.</strong> There are no servers, no accounts, no analytics, no telemetry, and no fonts or scripts loaded from the internet. The app never transmits anything you enter — it makes no network requests with your data.</li>
       <li><strong>Offline after first load.</strong> The app is downloaded once as static files and then runs entirely offline.</li>
       <li><strong>De-identified by design.</strong> Clients are identified only by initials or short codes — there are no fields for names, dates of birth, or school names.</li>
       <li><strong>Your passphrase cannot be recovered.</strong> If you forget it, the data is permanently unreadable. There is no reset. Keep backups.</li>
@@ -184,8 +199,8 @@
       We wanted the opposite: a fast, calm tool that captures real session data as it happens,
       turns it into a clean SOAP note in seconds, runs on the modest hardware schools actually
       have, works without internet, and keeps every bit of student information encrypted on the
-      clinician's own device. Nothing to log into, nothing to leak, nothing between you and the
-      work.
+      clinician's own device. Nothing to log into, nothing stored off your device, nothing between
+      you and the work.
     </p>
   </section>
 

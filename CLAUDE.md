@@ -242,7 +242,7 @@ unlocked private route awaits `onBeforeLock` hooks before wiping and loading fic
 ```
 npm install
 npm run dev        # dev server (hot reload, no service worker)
-npm test           # vitest — 127 tests across lib (crypto, backup, corpus, caseload, calendar, …)
+npm test           # vitest — 130 tests across lib (crypto, backup, corpus, caseload, calendar, …)
 npm run build      # vite build + gzip bundle-size gate (fails > 120 KB)
 npm run preview    # serve the production build (has the service worker)
 npm run icons      # regenerate public/icon-*.png (zero-dep PNG encoder; only if the mark changes)

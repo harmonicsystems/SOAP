@@ -120,16 +120,24 @@ describe('fictional January–April public-demo dataset', () => {
     for (const session of data.sessions) {
       expect(clients.has(session.clientId)).toBe(true)
       expect(SESSION_SETTINGS).toContain(session.setting)
+      const opportunityDomain = ['social-pragmatic', 'fluency', 'voice', 'other'].includes(
+        goals.get(session.goalData[0]?.goalId)?.domain
+      )
       for (const gd of session.goalData) {
         expect(goals.get(gd.goalId)?.clientId).toBe(session.clientId)
         expect(CUE_LEVELS).toContain(gd.cueLevel)
         expect(gd.cueTypes.every((cue) => CUE_TYPES.includes(cue))).toBe(true)
         expect(gd.observations.every((id) => observationTag(id))).toBe(true)
         if (gd.observations.includes('model')) expect(gd.cueTypes).toContain('model')
+        // support-implying observations never contradict the cue data
+        if (gd.cueLevel === 'independent') expect(gd.observations).toEqual([])
+        if (gd.observations.includes('visual')) expect(gd.cueTypes).toContain('visual')
         expect(Number.isInteger(gd.trials.correct)).toBe(true)
         expect(Number.isInteger(gd.trials.total)).toBe(true)
-        expect(gd.trials.total).toBeGreaterThanOrEqual(12)
-        expect(gd.trials.total).toBeLessThanOrEqual(30)
+        // opportunity-based behaviors are scored per natural opportunity —
+        // far fewer per session than drilled articulation/language trials
+        expect(gd.trials.total).toBeGreaterThanOrEqual(opportunityDomain ? 8 : 15)
+        expect(gd.trials.total).toBeLessThanOrEqual(opportunityDomain ? 12 : 22)
         expect(gd.trials.correct).toBeGreaterThanOrEqual(0)
         expect(gd.trials.correct).toBeLessThanOrEqual(gd.trials.total)
       }
@@ -289,6 +297,64 @@ describe('fictional January–April public-demo dataset', () => {
     expect(data.sessions.find((session) => session.id === DEMO_GUIDE_TARGETS.draftSessionId)?.status).toBe('draft')
     expect(data.sessions.find((session) => session.id === DEMO_GUIDE_TARGETS.noteSessionId)?.status).toBe('final')
     expect(data.sessions.filter((session) => session.groupId === DEMO_GUIDE_TARGETS.groupId)).toHaveLength(4)
+  })
+
+  it('locks the content-review contract: honest claims, no meta-language, varied specifics', () => {
+    const data = buildSampleDataset({ anchorDate })
+    const goals = new Map(data.goals.map((goal) => [goal.id, goal]))
+
+    for (const session of data.sessions) {
+      // goal labels never collide with the "with N% accuracy" O frame
+      expect(session.soap.O).not.toMatch(/\bproduced accurate\b/i)
+      // a "met the criteria" claim only appears when every measured goal met
+      if (/met (?:the|its) stated/i.test(session.soap.A)) {
+        const scoped = /remain(?:ed|s) below criterion/i.test(session.soap.A)
+        if (!scoped) {
+          expect(
+            session.goalData.every((gd) => goals.get(gd.goalId)?.status === 'met')
+          ).toBe(true)
+        }
+      }
+      // the content rulebook never leaks into the clinical text
+      expect(`${session.soap.A} ${session.soap.P}`).not.toMatch(
+        /without attributing|no cause was inferred|clinician judgment/i
+      )
+    }
+
+    // first sessions never assert trends or cross-session comparisons
+    for (const client of data.clients) {
+      const first = data.sessions.find((session) => session.clientId === client.id)
+      expect(first.soap.A).not.toMatch(/\b(?:increased|improved|earlier|other early|lower than)\b/i)
+      // standouts vary across the term — the "specific moment" is never
+      // stamped identically on every visit
+      const standouts = new Set(
+        data.sessions.filter((s) => s.clientId === client.id).map((s) => s.standout)
+      )
+      expect(standouts.size).toBeGreaterThanOrEqual(3)
+    }
+
+    // two-target standout lines only appear beside two measured goals
+    for (const session of data.sessions.filter((s) => s.goalData.length === 1)) {
+      expect(session.standout).not.toMatch(/\b(?:two|both|one target)\b/i)
+    }
+
+    // no baseline inversion: connected-speech goals sit below their
+    // structured-word/sentence siblings for the same sound class
+    const byCode = (code) =>
+      data.goals.filter((g) => g.clientId === SAMPLE_CLIENT_IDS[code.toLowerCase()])
+    for (const code of ['ELM', 'AV']) {
+      const [structured, connected] = byCode(code)
+      const pct = (goal) => Number(goal.baseline.match(/^(\d+)/)[1])
+      expect(pct(connected)).toBeLessThan(pct(structured))
+    }
+
+    // opportunity-based goal text uses the opportunities convention
+    for (const goal of data.goals) {
+      const client = data.clients.find((c) => c.id === goal.clientId)
+      const opportunity = ['social-pragmatic', 'fluency', 'voice', 'other'].includes(goal.domain)
+      expect(goal.text.includes('% of observed opportunities')).toBe(opportunity)
+      void client
+    }
   })
 
   it('contains no identifying fields or blame/causation language', () => {
