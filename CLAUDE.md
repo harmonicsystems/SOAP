@@ -20,7 +20,7 @@ the source of truth for exact output formats.
   plain text assembly — same input always yields same output. (AI was used to *build* the app; it
   is not *in* the app. This distinction is stated on the Help page and must stay true.)
 - **Bundle budget: total JS ≤ 120 KB gzipped**, enforced by `scripts/check-bundle-size.mjs` in
-  every `npm run build` (CI fails over budget). Currently ~109 KB. **No new runtime dependency
+  every `npm run build` (CI fails over budget). Currently ~113 KB. **No new runtime dependency
   without a size justification in a code comment.** Only runtime dep is Dexie.
 - **Plain CSS** with custom properties (`src/styles/global.css`) — no framework. Low-stimulation
   design: muted palette, generous whitespace, big touch targets, works on a weak Acer/Edge laptop.
@@ -87,6 +87,13 @@ hand-rolled SVG charts · `vite-plugin-pwa` (Workbox) · Vitest. Node 20.17 here
   last, empty sections dropped), `resolveCaseloadTag` (includes archived), `visibleCaseloadTags`,
   `WEEKDAYS`. Caseload tags are `settings.caseloadTags` `{id:'ctag-…', label, archived}` —
   archived never deleted; definitions travel through merge-import via `mergeCorpusSettings`.
+- `calendar.js` — Schedule screen logic (round 6): UTC-safe ISO date math (`mondayOf`, `weekDates`,
+  `monthGrid` — Mon–Fri school grid whose weeks all touch the month), `sessionsByDate`,
+  `dayPlan(date, clients, byDate)` = the planned-vs-actual join (scheduled clients with that
+  date's session or null, plus `extra` unscheduled sessions so makeups never disappear),
+  `rangeSummary` (total/drafts accountability counts), `weekendSessions` (manually weekend-dated
+  work stays discoverable despite the 5-column grid), `latestSessionDate` (anchors the demo
+  calendar inside its fictional term instead of an empty real-world "today").
 - `sampleData.js` — compact deterministic generator for the most recently completed January–April
   term: 25 letter-only codes, 35 goals, 268 per-client sessions, 7 recurring groups, and 110 total
   meetings. Carries `sample:true` + `sampleDataset:'winter-trimester-v2'`; O text always flows
@@ -96,6 +103,8 @@ hand-rolled SVG charts · `vite-plugin-pwa` (Workbox) · Vitest. Node 20.17 here
 
 **Components** — `App.svelte` (mode orchestration + private auto-lock), `Welcome`, `LockScreen`
 (create/unlock), `Workspace`, `Header`, `DemoBanner`, `DemoGuide`, `Caseload` (+ group creation),
+`Calendar` (Schedule screen: week planned-vs-actual + month grid; tapping a scheduled student
+opens or creates that day's session — the create is double-tap guarded),
 `ClientDetail`, `GoalBuilder`, `SessionScreen` (core live screen; `embedded` prop for group use),
 `GoalCard`, `PhraseSection`, `NoteOutput`, `Progress`, `Chart`/`Sparkline` (SVG), `Settings`, `Help`,
 `GroupSession` (client-switcher wrapper reusing SessionScreen), `BackupBanner`, `SampleTag`, `Toast`.
@@ -233,7 +242,7 @@ unlocked private route awaits `onBeforeLock` hooks before wiping and loading fic
 ```
 npm install
 npm run dev        # dev server (hot reload, no service worker)
-npm test           # vitest — 117 tests across lib (crypto, backup, corpus, caseload, demo, repo, …)
+npm test           # vitest — 127 tests across lib (crypto, backup, corpus, caseload, calendar, …)
 npm run build      # vite build + gzip bundle-size gate (fails > 120 KB)
 npm run preview    # serve the production build (has the service worker)
 npm run icons      # regenerate public/icon-*.png (zero-dep PNG encoder; only if the mark changes)

@@ -38,6 +38,7 @@ describe('hash route matching', () => {
       params: { groupId: 'grp1' }
     })
     expect(matchRoute('#/settings')).toEqual({ mode: 'private', name: 'settings', params: {} })
+    expect(matchRoute('#/calendar')).toEqual({ mode: 'private', name: 'calendar', params: {} })
   })
 
   it('resolves demo-prefixed application and guide routes', () => {
@@ -59,6 +60,7 @@ describe('hash route matching', () => {
       params: { id: 's1' }
     })
     expect(matchRoute('#/demo/help')).toEqual({ mode: 'demo', name: 'help', params: {} })
+    expect(matchRoute('#/demo/calendar')).toEqual({ mode: 'demo', name: 'calendar', params: {} })
     expect(matchRoute('#/demo/settings').name).toBe('notfound')
   })
 

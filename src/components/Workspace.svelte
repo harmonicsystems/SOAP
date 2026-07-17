@@ -4,6 +4,7 @@
   import BackupBanner from './BackupBanner.svelte'
   import DemoBanner from './DemoBanner.svelte'
   import Caseload from './Caseload.svelte'
+  import Calendar from './Calendar.svelte'
   import ClientDetail from './ClientDetail.svelte'
   import SessionScreen from './SessionScreen.svelte'
   import NoteOutput from './NoteOutput.svelte'
@@ -22,6 +23,8 @@
 <main class="container">
   {#if $route.name === 'clients'}
     <Caseload />
+  {:else if $route.name === 'calendar'}
+    <Calendar />
   {:else if $route.name === 'client'}
     <ClientDetail id={$route.params.id} />
   {:else if $route.name === 'progress'}

@@ -24,6 +24,12 @@
     >
       Caseload
     </a>
+    <a
+      href={hrefFor('calendar', demo ? 'demo' : 'private')}
+      class:active={$route.name === 'calendar'}
+    >
+      Schedule
+    </a>
     {#if demo}
       <a href={hrefFor(`guide/${$demoGuideStep}`, 'demo')} class:active={$route.name === 'guide'}>Guide</a>
       <a href={hrefFor('help', 'demo')} class:active={$route.name === 'help'}>Help</a>

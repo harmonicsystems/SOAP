@@ -3,6 +3,7 @@ import { readable } from 'svelte/store'
 
 const APP_ROUTES = [
   ['clients', 'clients'],
+  ['calendar', 'calendar'],
   ['client/:id', 'client'],
   ['client/:id/progress', 'progress'],
   ['session/:id', 'session'],

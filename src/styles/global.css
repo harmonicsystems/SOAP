@@ -821,6 +821,147 @@ button.undo {
   text-decoration: underline;
 }
 
+/* ---- schedule / calendar (round 6) ---- */
+
+.cal-week {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.cal-day {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.6rem 0.65rem;
+  min-width: 0;
+}
+
+.cal-day.today {
+  border-color: var(--accent);
+}
+
+.cal-day h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.cal-date {
+  color: var(--muted);
+  font-weight: normal;
+  font-size: 0.8rem;
+}
+
+.cal-empty {
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.cal-slot {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  width: 100%;
+  text-align: left;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.45rem 0.55rem;
+  margin-bottom: 0.4rem;
+  cursor: pointer;
+  font: inherit;
+  color: var(--ink);
+}
+
+.cal-slot:hover {
+  border-color: var(--accent);
+}
+
+.cal-month {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+
+.cal-month-head {
+  color: var(--muted);
+  font-size: 0.8rem;
+  text-align: center;
+  padding-bottom: 0.15rem;
+}
+
+.cal-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+  min-height: 4.2rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.4rem 0.5rem;
+  cursor: pointer;
+  font: inherit;
+  color: var(--ink);
+  min-width: 0;
+}
+
+.cal-cell.outside {
+  background: var(--bg);
+  color: var(--muted);
+}
+
+.cal-cell.today {
+  border-color: var(--accent);
+}
+
+.cal-cell.selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.cal-cell-day {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.cal-detail-row {
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+@media (max-width: 760px) {
+  .cal-week {
+    grid-template-columns: 1fr;
+  }
+
+  .cal-month {
+    gap: 0.25rem;
+  }
+
+  .cal-cell {
+    min-height: 3.4rem;
+    padding: 0.3rem 0.35rem;
+    overflow: hidden;
+  }
+
+  /* A nowrap "3 drafts" tag is wider than a phone-width cell — let it wrap
+     inside the cell instead of bleeding across the grid gap. */
+  .cal-cell .tag {
+    white-space: normal;
+    text-align: left;
+    line-height: 1.2;
+  }
+}
+
 /* ---- print: the note view is the PDF path (spec §5.5) ---- */
 
 @media print {
